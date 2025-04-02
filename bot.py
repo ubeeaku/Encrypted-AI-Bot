@@ -85,7 +85,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.lower()
-
+    
     if user_input in bible_references:
         verse, explanation = get_bible_verse(user_input)
         response = (
@@ -96,21 +96,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "For more encouragement, you can use a Bible app like YouVersion or Bible Gateway to explore more verses and devotionals."
         )
         await update.message.reply_text(response)
-        return ConversationHandler.END  # End the conversation
-    else:
-        # Only show the prompt once per conversation
+        return ConversationHandler.END
+        
+    else:  # This else must align with its if statement
         if context.user_data.get('asked_for_emotion'):
             await update.message.reply_text(
                 "I didn't understand that. Please type /start to begin again."
             )
             return ConversationHandler.END
-    else:
-        context.user_data['asked_for_emotion'] = True
-        await update.message.reply_text(
-            "I'm here to listen. Sometimes, just talking about how you feel can help. Would you like to share more?\n\n"
-            "You can say 'sad', 'anxious', 'lonely', 'angry', or 'scared', or type /start to begin again."
+        else:
+            context.user_data['asked_for_emotion'] = True
+            await update.message.reply_text(
+                "I'm here to listen. Sometimes, just talking about how you feel can help. Would you like to share more?\n\n"
+                "You can say 'sad', 'anxious', 'lonely', 'angry', or 'scared', or type /start to begin again."
             )
             return WAITING_FOR_EMOTION
+   
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Okay, take care! Type /start anytime you want to talk.")
     return ConversationHandler.END    
