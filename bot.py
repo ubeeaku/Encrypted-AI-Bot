@@ -1,6 +1,6 @@
 import os
 import requests
-import threadimg
+import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import (
