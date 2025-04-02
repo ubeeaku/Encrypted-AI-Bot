@@ -117,7 +117,7 @@ def main():
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
-        .read_timeout(30)
+        .read_timeout(30) \
         .get_updates_read_timeout(30) \
         .build()
     flask_thread = threading.Thread(target=run_flask)
