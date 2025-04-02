@@ -1,5 +1,6 @@
 import os
 import requests
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -94,8 +95,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    
 # --- Main Function ---
 def main():
+     import threading
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+    
     print("Starting bot...")
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
