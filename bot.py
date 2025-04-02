@@ -93,7 +93,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    
 def main():
+     import threading
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
     print("Starting Encrypted AI bot...")
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
