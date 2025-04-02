@@ -115,11 +115,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Okay, take care! Type /start anytime you want to talk.")
     return ConversationHandler.END    
-    else:
-        response = (
-            "I'm here to listen. Sometimes, just talking about how you feel can help. Would you like to share more?\n\n"
-            "You can say 'sad', 'anxious', 'lonely', 'angry', or 'scared'."
-        )
+        else:
+            response = (
+                "I'm here to listen. Sometimes, just talking about how you feel can help. Would you like to share more?\n\n"
+                "You can say 'sad', 'anxious', 'lonely', 'angry', or 'scared'."
+            )
 
     await update.message.reply_text(response)
 
