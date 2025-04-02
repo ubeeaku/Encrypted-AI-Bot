@@ -1,4 +1,5 @@
 import os
+import threading
 import requests
 from flask import Flask
 from telegram import Update
@@ -106,7 +107,11 @@ def run_flask():
     
 # --- Main Function ---
 def main():
-     import threading
+    # Add this to ensure single instance
+    application = Application.builder() \
+        .token(TELEGRAM_BOT_TOKEN) \
+        .concurrent_updates(False) \  # Disable parallel processing
+        .build()
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
     
