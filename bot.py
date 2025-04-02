@@ -1,5 +1,7 @@
 import os
 import requests
+import threadimg
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -31,6 +33,10 @@ bible_references = {
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
+    url = f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search"
+    headers = {"api-key": API_BIBLE_KEY}
+    params = {"query": reference, "limit": 1}
+    
     try:
         response = requests.get(
             f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search",
@@ -46,6 +52,18 @@ def fetch_bible_verse(reference):
         print(f"Error fetching verse: {e}")
     return None
 
+def get_bible_verse(emotion):
+    if emotion in bible_references:
+        reference = random.choice(bible_references[emotion])
+        verse_text = fetch_bible_verse(reference)
+        if verse_text:
+            return verse_text, f"This verse reminds us that {emotion} is natural, but God is with us."
+    return (
+        "John 16:33 - In this world you will have trouble. But take heart! I have overcome the world.",
+        "This verse reminds us that Jesus has overcome the world's challenges."
+    )
+
+
 # --- Handler Functions ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -57,7 +75,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.lower()
     
     if user_input in bible_references:
-        verse = fetch_bible_verse(random.choice(bible_references[user_input]))
+        verse = get_bible_verse(random.choice(bible_references[user_input]))
         if verse:
             await update.message.reply_text(f"Here's a verse for you:\n\n{verse}")
         else:
@@ -76,6 +94,18 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Take care! Type /start to chat again.")
     return ConversationHandler.END
 
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Update {update} caused error {context.error}")
+
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
 # --- Main Application ---
 def main():
     # Initialize application with single instance setting
@@ -83,6 +113,8 @@ def main():
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
         .build()
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
     
     # Set up conversation handler
     conv_handler = ConversationHandler(
