@@ -64,7 +64,7 @@ def get_bible_verse(emotion):
         if verse_text:
             return verse_text, f"This verse reminds us that {emotion} is natural, but God is with us."
     return (
-        "John 16:33 - In this world you will have trouble. But take heart! I have overcome the world."\n
+        "John 16:33 - In this world you will have trouble. But take heart! I have overcome the world.",
         "This verse reminds us that Jesus has overcome the world's challenges."
     )
 
@@ -72,7 +72,7 @@ def get_bible_verse(emotion):
 # --- Handler Functions ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hello! How are you feeling? (sad, anxious, lonely, angry, scared)"
+        "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
     return WAITING_FOR_EMOTION
 
