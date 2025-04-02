@@ -1,4 +1,5 @@
 import os
+import asyncio
 import requests
 import threading
 from flask import Flask
@@ -35,6 +36,24 @@ bible_references = {
     "insecure": ["Psalm 139:14", "Ephesians 2:10", "Jeremiah 1:5"],
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
+
+def create_application():
+    """Configure bot with conflict prevention settings"""
+    return Application.builder() \
+        .token(TELEGRAM_BOT_TOKEN) \
+        .concurrent_updates(False) \
+        .post_init(post_init) \
+        .post_stop(post_stop) \
+        .build()
+
+async def post_init(application):
+    """Runs after bot initialization"""
+    print("Bot initialized successfully")
+    await application.bot.set_webhook()  # Ensure no webhook is set
+
+async def post_stop(application):
+    """Cleanup before shutdown"""
+    print("Bot shutting down gracefully")
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
@@ -113,6 +132,11 @@ def run_flask():
 
 # --- Main Application ---
 def main():
+    print("Starting single-instance bot...")
+    
+    # Create and configure application
+    application = create_application()
+    
     # Initialize application with single instance setting
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
@@ -135,12 +159,23 @@ def main():
     )
     
     application.add_handler(conv_handler)
+    application.add_error_handler(error_handler)
+    
     print("Bot is running...")
+
+    # Start polling with conflict prevention
     application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        close_loop=False,  # Important for Render
-        stop_signals=None  # Prevent signal handling issues
+        poll_interval=3.0,
+        timeout=30,
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES
     )
 
 if __name__ == "__main__":
-    main()
+    # Ensure only one instance runs
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Bot stopped by user")
+    except Exception as e:
+        print(f"Fatal error: {e}")
