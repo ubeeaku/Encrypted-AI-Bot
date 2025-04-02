@@ -99,7 +99,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.lower()
     
     if user_input in bible_references:
-        verse = get_bible_verse(random.choice(bible_references[user_input]))
+        verse = fetch_bible_verse(random.choice(bible_references[user_input]))
         if verse:
             await update.message.reply_text(f"Here's a verse for you:\n\n{verse}")
         else:
