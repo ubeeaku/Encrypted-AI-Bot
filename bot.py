@@ -117,6 +117,8 @@ def main():
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
+        .read_timeout(30)
+        .get_updates_read_timeout(30)\
         .build()
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
@@ -134,7 +136,11 @@ def main():
     
     application.add_handler(conv_handler)
     print("Bot is running...")
-    application.run_polling()
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        close_loop=False,  # Important for Render
+        stop_signals=None  # Prevent signal handling issues
+    )
 
 if __name__ == "__main__":
     main()
