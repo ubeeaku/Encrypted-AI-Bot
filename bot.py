@@ -24,11 +24,16 @@ DEFAULT_BIBLE_ID = "de4e12af7f28f599-01"
 
 # Dictionary of emotions and Bible references
 bible_references = {
-    "sad": ["Psalm 34:18", "Matthew 11:28"],
-    "anxious": ["Philippians 4:6-7", "1 Peter 5:7"],
-    "lonely": ["Hebrews 13:5", "Psalm 68:6"],
-    "angry": ["Ephesians 4:26", "Proverbs 15:1"],
-    "scared": ["2 Timothy 1:7", "Isaiah 41:10"]
+    "sad": ["Psalm 34:18", "Matthew 11:28", "Matthew 5:4", "Psalm 147:3"],
+    "anxious": ["Philippians 4:6-7", "1 Peter 5:7", "Matthew 6:25-34"],
+    "lonely": ["Hebrews 13:5", "Psalm 68:6", "Deuteronomy 31:6"],
+    "angry": ["Ephesians 4:26", "Proverbs 15:1", "James 1:19-20"],
+    "scared": ["2 Timothy 1:7", "Isaiah 41:10", "Psalm 56:3"],
+     "discouraged": ["Isaiah 41:10", "Joshua 1:9", "Galatians 6:9"],
+    "overwhelmed": ["Matthew 11:28-30", "Psalm 61:2", "2 Corinthians 12:9"],
+    "guilty": ["1 John 1:9", "Psalm 103:12", "Romans 8:1"],
+    "insecure": ["Psalm 139:14", "Ephesians 2:10", "Jeremiah 1:5"],
+    "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
 # --- Helper Functions ---
@@ -59,7 +64,7 @@ def get_bible_verse(emotion):
         if verse_text:
             return verse_text, f"This verse reminds us that {emotion} is natural, but God is with us."
     return (
-        "John 16:33 - In this world you will have trouble. But take heart! I have overcome the world.",
+        "John 16:33 - In this world you will have trouble. But take heart! I have overcome the world."\n
         "This verse reminds us that Jesus has overcome the world's challenges."
     )
 
