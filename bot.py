@@ -57,9 +57,25 @@ async def post_stop(application):
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
-    url = f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search"
-    headers = {"api-key": API_BIBLE_KEY}
-    params = {"query": reference, "limit": 1}
+    try:
+        print(f"Fetching verse: {reference}")  # Debug
+        url = f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search"
+        headers = {"api-key": API_BIBLE_KEY}
+        params = {"query": reference, "limit": 1}
+
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()  # Raises exception for HTTP errors
+        
+        data = response.json()
+        print(f"API Response: {data}")  # Debug
+        
+        if data.get("data", {}).get("verses"):
+            return data["data"]["verses"][0]["text"]
+            
+    except Exception as e:
+        print(f"API Error: {str(e)}")  # Debug
+    
+    return None
     
     try:
         response = requests.get(
@@ -96,7 +112,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.lower()
+    user_input = update.message.text.lower().strip()  # clean input
+
+    # Debug: Show what emotion we detected
+    print(f"User input: '{user_input}'")
+    print(f"Matching against: {list(bible_references.keys())}")
+    
+    # Find the closest matching emotion
+    matched_emotion = None
+    for emotion in bible_references.keys():
+        if emotion in user_input:  # Checks for partial matches
+            matched_emotion = emotion
+            break
+    
+    if matched_emotion:
+        print(f"Matched emotion: {matched_emotion}")
+        
+        # Get random verse reference for this emotion
+        verse_reference = random.choice(bible_references[matched_emotion])
+        print(f"Selected verse: {verse_reference}")
+        
+        # Fetch verse text from API
+        verse_text = fetch_bible_verse(verse_reference)
+        
+        if verse_text:
+            explanation = (
+                f"This verse reminds us that {matched_emotion} is a natural feeling, "
+                f"but God is always with us to provide comfort and guidance."
+            )
+            response = (
+                f"I'm sorry you're feeling {matched_emotion}. Here's a verse for you:\n\n"
+                f"{verse_reference}\n{verse_text}\n\n"
+                f"What this means:\n{explanation}"
+            )
+        else:
+            # Fallback if API fails
+            response = (
+                f"I wanted to share a verse about {matched_emotion}, but couldn't connect to the Bible API. "
+                f"Try again later or read {verse_reference} in your Bible."
+            )
+    else:
+        # Default response for no match
+        response = (
+            "I'm here to listen. You can share feelings like:\n"
+            "'sad', 'anxious', 'lonely', 'angry', or 'scared'.\n\n"
+            "Or type /cancel to end our chat."
+        )
+    
+    await update.message.reply_text(response)
+    
+    if matched_emotion:
+        return ConversationHandler.END
+    else:
+        return WAITING_FOR_EMOTION
     
     if user_input in bible_references:
         verse = fetch_bible_verse(random.choice(bible_references[user_input]))
