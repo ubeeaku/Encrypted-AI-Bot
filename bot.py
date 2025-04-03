@@ -185,7 +185,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return 1
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_input = update.message.text.lower()
     try:
         if not update.message or not update.message.text:
             await update.message.reply_text("Please send a text message")
