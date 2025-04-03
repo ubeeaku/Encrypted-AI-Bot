@@ -232,9 +232,6 @@ def main():
     # Start Flask in background
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
-
-    # Create and configure application
-    application = create_application()
     
     # Create Telegram application
     application = Application.builder() \
@@ -268,7 +265,11 @@ def main():
         close_loop=False,
         stop_signals=[]
     )
-    
+ except Exception as e:
+        print(f"💥 Polling error: {e}")
+    finally:
+        cleanup_lock()
+        
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
@@ -277,10 +278,7 @@ if __name__ == "__main__":
 
     try:
         application.run_polling()
-    except Exception as e:
-        print(f"Fatal polling error: {e}")
-    finally:
-        cleanup_lock()
+
     # try:
     #     main()
     # except KeyboardInterrupt:
