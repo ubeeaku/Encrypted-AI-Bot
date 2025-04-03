@@ -216,56 +216,48 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    application = create_application()
-    application.run_polling(
-        poll_interval=5.0,
-        drop_pending_updates=True,
-        close_loop=False
-    )
-
-    
-    # Check for single instance
+    # Verify single instance
     check_single_instance()
     atexit.register(cleanup_lock)
     
-    # Start Flask in background
+    # Start Flask health check
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
-    
-    # Create Telegram application
+
+    # Create application ONCE
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
         .post_init(cleanup_webhook) \
         .build()
 
-    # Add handlers
+    # Add conversation handler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            WAITING_FOR_EMOTION: [
+            ConversationState.WAITING_INITIAL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DISCUSSING_VERSE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DEEP_DIVE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
             ]
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
     application.add_handler(conv_handler)
-
-    # Register error handler
     application.add_error_handler(error_handler)
 
-    print("Bot starting...")
+    print("🚀 Bot starting...")
     application.run_polling(
         poll_interval=5.0,
-        timeout=30,
         drop_pending_updates=True,
-        bootstrap_retries=0,  # Disable retries
-        allowed_updates=Update.ALL_TYPES,
         close_loop=False,
         stop_signals=[]
     )
-        
+    
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
