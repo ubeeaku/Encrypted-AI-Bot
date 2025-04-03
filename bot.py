@@ -265,7 +265,7 @@ def main():
         close_loop=False,
         stop_signals=[]
     )
- except Exception as e:
+    except Exception as e:
         print(f"💥 Polling error: {e}")
     finally:
         cleanup_lock()
