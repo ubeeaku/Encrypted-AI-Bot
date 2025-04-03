@@ -20,13 +20,13 @@ from telegram.ext import (
 import random
 import sys
 
-# --- Single Instance Enforcement ---
-INSTANCE_LOCK = "/tmp/bot.lock"
 
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BIBLE_KEY = os.getenv("API_BIBLE_KEY")
 WAITING_FOR_EMOTION = 1
+# --- Single Instance Enforcement ---
+INSTANCE_LOCK = "/tmp/bot.lock"
 
 # API.Bible configuration
 API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
@@ -49,20 +49,16 @@ bible_references = {
 async def enforce_single_instance():
     """Atomic instance check using file locks"""
     try:
+        try:
         fd = os.open(INSTANCE_LOCK, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
         with os.fdopen(fd, 'w') as f:
             f.write(str(os.getpid()))
         return True
     except FileExistsError:
-        try:
-            with open(INSTANCE_LOCK, 'r') as f:
-                pid = f.read()
-                print(f"⚠️ Existing instance found (PID: {pid})")
-        except:
-            print("⚠️ Lockfile exists but unreadable")
+        print("⚠️ Another instance detected")
         return False
 
-def cleanup_lock():
+async def cleanup_lock():
     """Safe lock removal"""
     try:
         os.remove(INSTANCE_LOCK)
