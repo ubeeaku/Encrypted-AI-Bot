@@ -226,7 +226,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
     return ConversationState.WAITING_INITIAL
-    # return WAITING_FOR_EMOTION
+    return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response, new_state = await conversation_mgr.generate_response(
