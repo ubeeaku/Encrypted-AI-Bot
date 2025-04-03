@@ -113,38 +113,7 @@ check_single_instance()
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
-    """Robust verse fetcher with better parsing"""
-    try:
-         response = requests.get(
-            f"{os.getenv('API_BIBLE_URL')}/{os.getenv('DEFAULT_BIBLE_ID')}/search",
-            headers={"api-key": os.getenv("API_BIBLE_KEY")},
-            params={"query": reference, "limit": 1},
-            timeout=15
-        )
-
-        # 2. Make the request
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        
-         # 3. Check for HTTP errors (401, 404, etc.)
-        response.raise_for_status()  # Raises exception for HTTP errors
-
-        # 4. Parse the response
-        data = response.json()
-
-        # Debug: Log the full response
-        print(f"API Response: {data}")  # Debug
-
-        # 5. Extract verse text
-        if data.get("data", {}).get("verses"):
-            content = data["data"]["verses"][0]["text"]
-            # Simple HTML stripping (adapt as needed)
-            return ' '.join(content.split()).replace('<span class="wj">', '').replace('</span>', '')
-        
-            
-    except Exception as e:
-        print(f"API Error: {type(e).__name__} - {str(e)}")
-    return None
-    
+    """Improved verse fetcher with HTML cleaning"""    
     try:
         response = requests.get(
             f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search",
@@ -154,10 +123,23 @@ def fetch_bible_verse(reference):
         )
         response.raise_for_status()
         data = response.json()
-        if data["data"]["verses"]:
-            return data["data"]["verses"][0]["text"]
+        
+        if data.get('data', {}).get('passages'):
+            # Extract raw HTML content
+            html_content = data['data']['passages'][0]['content']
+            
+            # Method 1: Simple regex cleanup (faster)
+            clean_text = re.sub(r'<[^>]+>', '', html_content)  # Remove all HTML tags
+            clean_text = ' '.join(clean_text.split())  # Normalize whitespace
+            
+            # Method 2: BeautifulSoup (more robust)
+            # soup = BeautifulSoup(html_content, 'html.parser')
+            # clean_text = soup.get_text(separator=' ', strip=True)
+            
+            return clean_text
+            
     except Exception as e:
-        print(f"Error fetching verse: {e}")
+        print(f"API Error: {type(e).__name__} - {str(e)}")
     return None
 
 def get_bible_verse(emotion):
@@ -201,9 +183,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Selected verse: {verse_reference}")
         
         # Fetch verse text from API
-        verse_text = fetch_bible_verse(verse_reference)
-        
+        verse_text = fetch_bible_verse(reference)
         if verse_text:
+            # Remove verse numbers if present (e.g., "3 He healeth..." → "He healeth...")
+            clean_verse = re.sub(r'^\d+\s*', '', verse_text)
             explanation = (
                 f"This verse reminds us that {matched_emotion} is a natural feeling, "
                 f"but God is always with us to provide comfort and guidance."
@@ -225,25 +208,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "I'm here to listen. You can share feelings like:\n"
             "'sad', 'anxious', 'lonely', 'angry', or 'scared'.\n\n"
             "Or type /cancel to end our chat."
-        )
-    
-    await update.message.reply_text(response)
-    
-    if matched_emotion:
-        return ConversationHandler.END
-    else:
-        return WAITING_FOR_EMOTION
-    
-    if verse_text:
-        response = f"Here's a verse for {matched_emotion}:\n\n{verse_text}"
-    else:
-        # More helpful error message
-        response = (
-            f"I couldn't fetch {verse_reference} right now. "
-            "This usually means:\n"
-            "1. The API is temporarily unavailable\n"
-            "2. Your API key needs updating\n\n"
-            "You can read {verse_reference} in your Bible app."
         )
     
     await update.message.reply_text(response)
