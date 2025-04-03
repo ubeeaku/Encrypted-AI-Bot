@@ -26,7 +26,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BIBLE_KEY = os.getenv("API_BIBLE_KEY")
 WAITING_FOR_EMOTION = 1
 # --- Single Instance Enforcement ---
-INSTANCE_LOCK = "/tmp/bot.lock"
+LOCKFILE_PATH = "/tmp/bot.lock"
 
 # API.Bible configuration
 API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
