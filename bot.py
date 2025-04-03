@@ -2,6 +2,8 @@ import os
 import asyncio
 import requests
 import threading
+import re
+from bs4 import BeautifulSoup
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update
