@@ -175,12 +175,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
+    return 1
     return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.text:
             await update.message.reply_text("Please send a text message")
+            return 1
             return ConversationState.WAITING_INITIAL
             
         response, new_state = await conversation_mgr.generate_response(
@@ -198,7 +200,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"⚠️ Handle message error: {e}")
         await update.message.reply_text("Let's start fresh. How are you feeling?")
+        return 1
         return ConversationState.WAITING_INITIAL
+        
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
     return ConversationHandler.END
@@ -207,10 +211,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and notify user"""
     print(f"⚠️ Update {update} caused error {context.error}")
     try:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Sorry, something went wrong. Please try again."
-        )
+        await update.message.reply_text("Sorry, something went wrong. Please try again.")
+        # await context.bot.send_message(
+        #     chat_id=update.effective_chat.id,
+        #     text="Sorry, something went wrong. Please try again."
+        # )
     except:
         pass  # Prevent error loops
 
@@ -235,18 +240,25 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            ConversationState.WAITING_INITIAL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DISCUSSING_VERSE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DEEP_DIVE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ]
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
+    # conv_handler = ConversationHandler(
+    #     entry_points=[CommandHandler('start', start)],
+    #     states={
+    #         ConversationState.WAITING_INITIAL: [
+    #             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    #         ],
+    #         ConversationState.DISCUSSING_VERSE: [
+    #             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    #         ],
+    #         ConversationState.DEEP_DIVE: [
+    #             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    #         ]
+    #     },
+    #     fallbacks=[CommandHandler('cancel', cancel)]
+    # )
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
 
@@ -265,7 +277,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        application.run_polling()
+        main()
+        # application.run_polling()
     except Exception as e:
         print(f"💥 Polling error: {e}")
     finally:
