@@ -265,10 +265,6 @@ def main():
         close_loop=False,
         stop_signals=[]
     )
-    except Exception as e:
-        print(f"💥 Polling error: {e}")
-    finally:
-        cleanup_lock()
         
 if __name__ == "__main__":
      # Verify environment variables
@@ -278,6 +274,10 @@ if __name__ == "__main__":
 
     try:
         application.run_polling()
+    except Exception as e:
+        print(f"💥 Polling error: {e}")
+    finally:
+        cleanup_lock()
 
     # try:
     #     main()
