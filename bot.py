@@ -233,7 +233,7 @@ def run_flask():
 # --- Main Application ---
 def main():
     if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
-    raise ValueError("Missing or invalid API_BIBLE_KEY")
+        raise ValueError("Missing or invalid API_BIBLE_KEY")
     
     print("Starting single-instance bot...")
     
