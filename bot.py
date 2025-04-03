@@ -17,6 +17,7 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler
 )
+from typing import Dict, List
 import random
 import sys
 
@@ -27,6 +28,53 @@ API_BIBLE_KEY = os.getenv("API_BIBLE_KEY")
 WAITING_FOR_EMOTION = 1
 # --- Single Instance Enforcement ---
 LOCKFILE_PATH = "/tmp/bot.lock"
+
+# --- Conversation States ---
+class ConversationState:
+    WAITING_INITIAL = 1
+    DISCUSSING_VERSE = 2
+    DEEP_DIVE = 3
+
+# --- AI Conversation Engine ---
+class ConversationManager:
+    def __init__(self):
+        self.context = {}
+        
+    async def generate_response(self, user_input: str, current_state: int) -> tuple[str, int]:
+        # Analyze user input and context
+        user_input = user_input.lower()
+        
+        if current_state == ConversationState.WAITING_INITIAL:
+            emotion = self._detect_emotion(user_input)
+            if emotion:
+                verse = random.choice(VERSE_DATABASE[emotion])
+                self.context['current_verse'] = verse
+                response = (
+                    f"Here's a verse for you:\n\n{verse.reference}\n{verse.text}\n\n"
+                    f"Explanation: {verse.explanation}\n\n"
+                    f"{random.choice(verse.related_questions)}"
+                )
+                return response, ConversationState.DISCUSSING_VERSE
+            else:
+                return "Could you tell me more about how you're feeling?", current_state
+        
+        elif current_state == ConversationState.DISCUSSING_VERSE:
+            # Implement NLP to analyze response and continue conversation
+            if any(word in user_input for word in ['yes', 'yeah', 'certainly']):
+                return "That's wonderful! What specifically about this verse speaks to you?", ConversationState.DEEP_DIVE
+            else:
+                return "Would you like me to share another verse that might help?", ConversationState.WAITING_INITIAL
+        
+        elif current_state == ConversationState.DEEP_DIVE:
+            # Store user's reflections in context
+            self.context['user_reflection'] = user_input
+            return "Thank for sharing that. Would you like to pray about this together?", ConversationState.WAITING_INITIAL
+
+    def _detect_emotion(self, text: str) -> str:
+        for emotion in VERSE_DATABASE:
+            if emotion in text:
+                return emotion
+        return None
 
 # --- Lightweight Instance Check ---
 def check_previous_instance():
@@ -60,6 +108,7 @@ bible_references = {
 
 # Flask app for health checks
 app = Flask(__name__)
+conversation_mgr = ConversationManager()
     
 @app.route('/')
 def health_check():
@@ -176,29 +225,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
-    return WAITING_FOR_EMOTION
+    return ConversationState.WAITING_INITIAL
+    # return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.lower().strip()
-    
-    matched_emotion = next(
-        (emotion for emotion in bible_references if emotion in user_input),
-        None
+    response, new_state = await conversation_mgr.generate_response(
+        update.message.text,
+        context.user_data.get('state', ConversationState.WAITING_INITIAL)
     )
+    context.user_data['state'] = new_state
+    await update.message.reply_text(response)
+    return new_state
+    # user_input = update.message.text.lower().strip()
     
-    if matched_emotion:
-        verse_ref = random.choice(bible_references[matched_emotion])
-        verse_text = fetch_bible_verse(verse_ref)
+    # matched_emotion = next(
+    #     (emotion for emotion in bible_references if emotion in user_input),
+    #     None
+    # )
+    
+    # if matched_emotion:
+    #     verse_ref = random.choice(bible_references[matched_emotion])
+    #     verse_text = fetch_bible_verse(verse_ref)
         
-        if verse_text:
-            response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
-        else:
-            response = f"Couldn't fetch {verse_ref}. Please try again later."
-    else:
-        response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
+    #     if verse_text:
+    #         response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
+    #     else:
+    #         response = f"Couldn't fetch {verse_ref}. Please try again later."
+    # else:
+    #     response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
     
     await update.message.reply_text(response)
-    return ConversationHandler.END
+    return new_state
+    # return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
@@ -214,8 +272,38 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except:
         pass  # Prevent error loops
+def create_application():
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            ConversationState.WAITING_INITIAL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DISCUSSING_VERSE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DEEP_DIVE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    application.add_handler(conv_handler)
+    application.add_error_handler(error_handler)
+    return application
 
 def main():
+    threading.Thread(target=run_flask, daemon=True).start()
+    application = create_application()
+    application.run_polling(
+        poll_interval=5.0,
+        drop_pending_updates=True,
+        close_loop=False
+    )
+    
     if check_previous_instance():
         print("🔄 Waiting for previous instance to terminate...")
         sys.exit(0)
