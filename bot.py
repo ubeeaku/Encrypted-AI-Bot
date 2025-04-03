@@ -214,8 +214,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and notify user"""
     logger.error(f"⚠️ Update {update} caused error {context.error}")
-    if update and update.message:
-        await update.message.reply_text("Sorry, something went wrong. Please try again.")
+    try:
+        if update and update.message:
+            await update.message.reply_text("Sorry, something went wrong. Please try again.")
         # await context.bot.send_message(
         #     chat_id=update.effective_chat.id,
         #     text="Sorry, something went wrong. Please try again."
