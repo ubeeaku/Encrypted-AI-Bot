@@ -279,6 +279,9 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
+
+    print("Current PID:", os.getpid())
+    print("Lock file contents:", open('/tmp/bot.lock').read())
     
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
