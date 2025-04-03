@@ -200,7 +200,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         await update.message.reply_text(response)
         context.user_data['state'] = new_state
-        return new_state
+        return 1
         
     except Exception as e:
         print(f"⚠️ Handle message error: {e}")
@@ -214,7 +214,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and notify user"""
     logger.error(f"⚠️ Update {update} caused error {context.error}")
-    try:
+    if update and update.message:
         await update.message.reply_text("Sorry, something went wrong. Please try again.")
         # await context.bot.send_message(
         #     chat_id=update.effective_chat.id,
@@ -225,6 +225,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    # Start Flask
+    threading.Thread(target=run_flask, daemon=True).start()
+    
     # Verify single instance
     check_single_instance()
     atexit.register(cleanup_lock)
@@ -268,9 +271,10 @@ def main():
 
     logger.info("🚀 Bot starting...")
     application.run_polling(
-        poll_interval=5.0,
+        poll_interval=10.0,
         drop_pending_updates=True,
         close_loop=False,
+        bootstrap_retries=0,  # Disable retries
         stop_signals=[]
     )
     
@@ -287,6 +291,7 @@ if __name__ == "__main__":
         # application.run_polling()
     except Exception as e:
         logger.erro(f"💥 Polling error: {e}")
+        sys.exit(1)
     
 
     # try:
