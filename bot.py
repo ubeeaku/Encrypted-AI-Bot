@@ -28,6 +28,18 @@ WAITING_FOR_EMOTION = 1
 # --- Single Instance Enforcement ---
 LOCKFILE_PATH = "/tmp/bot.lock"
 
+# --- Lightweight Instance Check ---
+def check_previous_instance():
+    """Simple check without persistent lockfile"""
+    try:
+        # Check running processes (Render-specific)
+        if os.system("ps aux | grep 'python bot.py' | grep -v grep | wc -l") > "1":
+            print("⚠️ Another bot instance detected")
+            return True
+    except:
+        pass
+    return False
+
 # API.Bible configuration
 API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
 DEFAULT_BIBLE_ID = "de4e12af7f28f599-01"
@@ -54,7 +66,7 @@ def health_check():
     return "OK", 200
 
 def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
 
 async def enforce_single_instance():
     """Atomic instance check using file locks"""
@@ -197,6 +209,10 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
 def main():
+    if check_previous_instance():
+        print("🔄 Waiting for previous instance to terminate...")
+        sys.exit(0)
+    
     # Check for single instance
     check_single_instance()
     atexit.register(cleanup_lock)
@@ -227,6 +243,7 @@ def main():
     application.run_polling(
         drop_pending_updates=True,
         close_loop=False
+        stop_signals=[]
     )
     
 if __name__ == "__main__":
@@ -241,5 +258,6 @@ if __name__ == "__main__":
         print("Bot stopped by user")
     except Exception as e:
         print(f"Error: {e}")
+        sys.exit(1)
     finally:
         cleanup_lock()
