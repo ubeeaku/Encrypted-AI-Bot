@@ -205,7 +205,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"⚠️ Handle message error: {e}")
         await update.message.reply_text("Let's start fresh. How are you feeling?")
-        return 1L
+        return 1
         
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
