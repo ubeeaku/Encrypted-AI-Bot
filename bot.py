@@ -58,15 +58,9 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
-# Flask app for health checks
-app = Flask(__name__)
-
-@app.route('/')
-def health_check():
-    return "OK", 200
 
 def run_flask():
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 async def enforce_single_instance():
     """Atomic instance check using file locks"""
@@ -129,7 +123,6 @@ def check_single_instance():
     except Exception as e:
         print(f"Lockfile error: {e}")
         sys.exit(1)
-check_single_instance()
 
 def cleanup_lock():
     """Safe lock removal"""
@@ -212,6 +205,15 @@ def main():
     if check_previous_instance():
         print("🔄 Waiting for previous instance to terminate...")
         sys.exit(0)
+
+    # Flask app for health checks
+    app = Flask(__name__)
+    @app.route('/')
+    def health_check():
+        return "OK", 200
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int
+(os.getenv("PORT", 10000))), daemon=True).start()
+
     
     # Check for single instance
     check_single_instance()
