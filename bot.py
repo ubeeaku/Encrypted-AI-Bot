@@ -15,7 +15,6 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler
 )
-from typing import Dict, List
 import random
 import sys
 
@@ -27,52 +26,6 @@ WAITING_FOR_EMOTION = 1
 # --- Single Instance Enforcement ---
 LOCKFILE_PATH = "/tmp/bot.lock"
 
-# --- Conversation States ---
-class ConversationState:
-    WAITING_INITIAL = 1
-    DISCUSSING_VERSE = 2
-    DEEP_DIVE = 3
-
-# --- AI Conversation Engine ---
-class ConversationManager:
-    def __init__(self):
-        self.context = {}
-        
-    async def generate_response(self, user_input: str, current_state: int) -> tuple[str, int]:
-        # Analyze user input and context
-        user_input = user_input.lower()
-        
-        if current_state == ConversationState.WAITING_INITIAL:
-            emotion = self._detect_emotion(user_input)
-            if emotion:
-                verse = random.choice(VERSE_DATABASE[emotion])
-                self.context['current_verse'] = verse
-                response = (
-                    f"Here's a verse for you:\n\n{verse.reference}\n{verse.text}\n\n"
-                    f"Explanation: {verse.explanation}\n\n"
-                    f"{random.choice(verse.related_questions)}"
-                )
-                return response, ConversationState.DISCUSSING_VERSE
-            else:
-                return "Could you tell me more about how you're feeling?", current_state
-        
-        elif current_state == ConversationState.DISCUSSING_VERSE:
-            # Implement NLP to analyze response and continue conversation
-            if any(word in user_input for word in ['yes', 'yeah', 'certainly']):
-                return "That's wonderful! What specifically about this verse speaks to you?", ConversationState.DEEP_DIVE
-            else:
-                return "Would you like me to share another verse that might help?", ConversationState.WAITING_INITIAL
-        
-        elif current_state == ConversationState.DEEP_DIVE:
-            # Store user's reflections in context
-            self.context['user_reflection'] = user_input
-            return "Thank for sharing that. Would you like to pray about this together?", ConversationState.WAITING_INITIAL
-
-    def _detect_emotion(self, text: str) -> str:
-        for emotion in VERSE_DATABASE:
-            if emotion in text:
-                return emotion
-        return None
 
 # --- Lightweight Instance Check ---
 def check_previous_instance():
@@ -106,7 +59,6 @@ bible_references = {
 
 # Flask app for health checks
 app = Flask(__name__)
-conversation_mgr = ConversationManager()
     
 @app.route('/')
 def health_check():
@@ -223,7 +175,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
-    return ConversationState.WAITING_INITIAL
     return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -304,15 +255,6 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             WAITING_FOR_EMOTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.WAITING_INITIAL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DISCUSSING_VERSE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DEEP_DIVE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
             ]
         },
