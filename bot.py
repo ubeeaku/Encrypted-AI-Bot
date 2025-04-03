@@ -282,14 +282,14 @@ def main():
     application.add_error_handler(error_handler)
     
     print("Bot is running...")
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(
-        poll_interval=5.0,
-        timeout=30,
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES
-    )
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(
+            poll_interval=5.0,
+            timeout=30,
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
+        )
     
     # Keep running until stopped
     while True:
