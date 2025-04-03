@@ -101,8 +101,9 @@ async def post_init(application):
     print("✅ Bot instance verified - Starting poll")
 
 async def post_stop(application):
-   """Cleanup tasks"""
+    """Cleanup tasks"""
     await cleanup_lock()
+    
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 
 def check_single_instance():
