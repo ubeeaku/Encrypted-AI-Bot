@@ -106,13 +106,13 @@ async def post_stop(application):
 def check_single_instance():
     """Ensure only one instance runs"""
     try:
-        if os.path.exists(LOCKFILE):
-            with open(LOCKFILE, 'r') as f:
+        if os.path.exists(LOCKFILE_PATH):
+            with open(LOCKFILE_PATH, 'r') as f:
                 pid = f.read()
                 print(f"⚠️ Another instance is running (PID: {pid}). Exiting.")
             sys.exit(1)
         
-        with open(LOCKFILE, 'w') as f:
+        with open(LOCKFILE_PATH, 'w') as f:
             f.write(str(os.getpid()))
     except Exception as e:
         print(f"Lockfile error: {e}")
@@ -122,7 +122,7 @@ check_single_instance()
 def cleanup_lock():
     """Safe lock removal"""
     try:
-        os.remove(LOCKFILE)
+        os.remove(LOCKFILE_PATH)
         print("🔒 Lock released")
     except:
         pass
