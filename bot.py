@@ -58,6 +58,12 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
+# Flask app for health checks
+    app = Flask(__name__)
+    
+    @app.route('/')
+    def health_check():
+        return "OK", 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
@@ -206,13 +212,6 @@ def main():
         print("🔄 Waiting for previous instance to terminate...")
         sys.exit(0)
 
-    # Flask app for health checks
-    app = Flask(__name__)
-    @app.route('/')
-    def health_check():
-        return "OK", 200
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int
-(os.getenv("PORT", 10000))), daemon=True).start()
 
     
     # Check for single instance
@@ -223,6 +222,9 @@ def main():
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
+    # Create and configure application
+    application = create_application()
+    
     # Create Telegram application
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
@@ -241,9 +243,16 @@ def main():
     )
     application.add_handler(conv_handler)
 
+    # Register error handler
+    application.add_error_handler(error_handler)
+
     print("Bot starting...")
     application.run_polling(
+        poll_interval=5.0,
+        timeout=30,
         drop_pending_updates=True,
+        bootstrap_retries=0,  # Disable retries
+        allowed_updates=Update.ALL_TYPES,
         close_loop=False,
         stop_signals=[]
     )
@@ -251,15 +260,15 @@ def main():
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
-        print("Error: Missing required environment variables")
+        print("❌ Error: Missing required environment variables")
         sys.exit(1)
     
     try:
         main()
     except KeyboardInterrupt:
-        print("Bot stopped by user")
+        print("🛑 Bot stopped by user")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"💥 Error: {e}")
         sys.exit(1)
     finally:
         cleanup_lock()
