@@ -232,19 +232,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return WAITING_FOR_EMOTION
     
-    if user_input in bible_references:
-        verse = fetch_bible_verse(random.choice(bible_references[user_input]))
-        if verse:
-            await update.message.reply_text(f"Here's a verse for you:\n\n{verse}")
-        else:
-            await update.message.reply_text("I couldn't fetch a verse right now. Try again later.")
-    else:
-        await update.message.reply_text(
-            "I'm here to listen. Try one of these feelings:\n"
-            "sad, anxious, lonely, angry, scared\n\n"
-            "Or /cancel to end our chat."
-        )
-        return WAITING_FOR_EMOTION
     if verse_text:
         response = f"Here's a verse for {matched_emotion}:\n\n{verse_text}"
     else:
