@@ -3,6 +3,7 @@ import asyncio
 import requests
 import threading
 from flask import Flask
+from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -55,25 +56,40 @@ async def post_stop(application):
     """Cleanup before shutdown"""
     print("Bot shutting down gracefully")
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
     try:
-        print(f"Fetching verse: {reference}")  # Debug
+        # 1.     Prepare the request
         url = f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search"
         headers = {"api-key": API_BIBLE_KEY}
         params = {"query": reference, "limit": 1}
 
+        # 2. Make the request
         response = requests.get(url, headers=headers, params=params, timeout=10)
+        
+         # 3. Check for HTTP errors (401, 404, etc.)
         response.raise_for_status()  # Raises exception for HTTP errors
-        
+
+        # 4. Parse the response
         data = response.json()
+
+        # Debug: Log the full response
         print(f"API Response: {data}")  # Debug
-        
+
+        # 5. Extract verse text
         if data.get("data", {}).get("verses"):
             return data["data"]["verses"][0]["text"]
+        else:
+            print(f"No verses found for {reference}")
+            return None
             
-    except Exception as e:
-        print(f"API Error: {str(e)}")  # Debug
+    except requests.exceptions.RequestException as e:
+        print(f"API Request Failed: {type(e).__name__} - {str(e)}")
+        return None
+    except ValueError as e:
+        print(f"JSON Decode Error: {str(e)}")
     
     return None
     
@@ -179,6 +195,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Or /cancel to end our chat."
         )
         return WAITING_FOR_EMOTION
+    if verse_text:
+        response = f"Here's a verse for {matched_emotion}:\n\n{verse_text}"
+    else:
+        # More helpful error message
+        response = (
+            f"I couldn't fetch {verse_reference} right now. "
+            "This usually means:\n"
+            "1. The API is temporarily unavailable\n"
+            "2. Your API key needs updating\n\n"
+            "You can read {verse_reference} in your Bible app."
+        )
+    
+    await update.message.reply_text(response)
     
     return ConversationHandler.END
 
@@ -203,6 +232,9 @@ def run_flask():
 
 # --- Main Application ---
 def main():
+    if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
+    raise ValueError("Missing or invalid API_BIBLE_KEY")
+    
     print("Starting single-instance bot...")
     
     # Create and configure application
