@@ -16,6 +16,9 @@ from telegram.ext import (
 import random
 import sys
 
+# --- Single Instance Enforcement ---
+LOCKFILE = "/tmp/bot.lock"
+
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BIBLE_KEY = os.getenv("API_BIBLE_KEY")
@@ -61,6 +64,18 @@ def create_application():
         .post_stop(post_stop) \
         .build()
 
+async def cleanup_webhook(app):
+    """Ensure no webhook conflicts"""
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Bot initialized - Ready to poll")
+
+async def remove_lock(app):
+    """Cleanup lockfile"""
+    try:
+        os.remove(LOCKFILE)
+        print("🔒 Lockfile removed")
+    except:
+        pass
 async def post_init(application):
     """Runs after bot initialization"""
     await app.bot.delete_webhook(drop_pending_updates=True)
@@ -77,13 +92,33 @@ async def post_stop(application):
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 
+def check_single_instance():
+    """Prevent multiple instances using file lock"""
+    try:
+        if os.path.exists(LOCKFILE):
+            with open(LOCKFILE, 'r') as f:
+                pid = f.read()
+                print(f"⚠️ Another instance is running (PID: {pid}). Exiting.")
+            sys.exit(1)
+        
+        with open(LOCKFILE, 'w') as f:
+            f.write(str(os.getpid()))
+    except Exception as e:
+        print(f"Lockfile error: {e}")
+        sys.exit(1)
+
+check_single_instance()
+
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
+    """Robust verse fetcher with better parsing"""
     try:
-        # 1.     Prepare the request
-        url = f"{API_BIBLE_URL}/{DEFAULT_BIBLE_ID}/search"
-        headers = {"api-key": API_BIBLE_KEY}
-        params = {"query": reference, "limit": 1}
+         response = requests.get(
+            f"{os.getenv('API_BIBLE_URL')}/{os.getenv('DEFAULT_BIBLE_ID')}/search",
+            headers={"api-key": os.getenv("API_BIBLE_KEY")},
+            params={"query": reference, "limit": 1},
+            timeout=15
+        )
 
         # 2. Make the request
         response = requests.get(url, headers=headers, params=params, timeout=10)
@@ -99,17 +134,13 @@ def fetch_bible_verse(reference):
 
         # 5. Extract verse text
         if data.get("data", {}).get("verses"):
-            return data["data"]["verses"][0]["text"]
-        else:
-            print(f"No verses found for {reference}")
-            return None
+            content = data["data"]["verses"][0]["text"]
+            # Simple HTML stripping (adapt as needed)
+            return ' '.join(content.split()).replace('<span class="wj">', '').replace('</span>', '')
+        
             
-    except requests.exceptions.RequestException as e:
-        print(f"API Request Failed: {type(e).__name__} - {str(e)}")
-        return None
-    except ValueError as e:
-        print(f"JSON Decode Error: {str(e)}")
-    
+    except Exception as e:
+        print(f"API Error: {type(e).__name__} - {str(e)}")
     return None
     
     try:
@@ -254,7 +285,7 @@ def main():
     if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
         raise ValueError("Missing or invalid API_BIBLE_KEY")
     
-    print("Starting single-instance bot...")
+    print(" 🚀 Starting single-instance bot...")
     
     # Create and configure application
     application = create_application()
@@ -295,14 +326,17 @@ def main():
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
         close_loop=False  # Critical for Render
+        stop_signals=[]    # Prevent signal handling issues
     )
 
 if __name__ == "__main__":
     # Ensure only one instance runs
     try:
         main()
-    except KeyboardInterrupt:
-        print("Bot stopped by user")
     except Exception as e:
-        print(f"Fatal error: {e}")
+        print(f"💥 Fatal error: {e}")
+        try:
+            os.remove(LOCKFILE)
+        except:
+            pass
         sys.exit(1)
