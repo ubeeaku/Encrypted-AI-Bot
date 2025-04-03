@@ -236,27 +236,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['state'] = new_state
     await update.message.reply_text(response)
     return new_state
-    # user_input = update.message.text.lower().strip()
+    user_input = update.message.text.lower().strip()
     
-    # matched_emotion = next(
-    #     (emotion for emotion in bible_references if emotion in user_input),
-    #     None
-    # )
+    matched_emotion = next(
+        (emotion for emotion in bible_references if emotion in user_input),
+        None
+    )
     
-    # if matched_emotion:
-    #     verse_ref = random.choice(bible_references[matched_emotion])
-    #     verse_text = fetch_bible_verse(verse_ref)
+    if matched_emotion:
+        verse_ref = random.choice(bible_references[matched_emotion])
+        verse_text = fetch_bible_verse(verse_ref)
         
-    #     if verse_text:
-    #         response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
-    #     else:
-    #         response = f"Couldn't fetch {verse_ref}. Please try again later."
-    # else:
-    #     response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
+        if verse_text:
+            response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
+        else:
+            response = f"Couldn't fetch {verse_ref}. Please try again later."
+    else:
+        response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
     
     await update.message.reply_text(response)
     return new_state
-    # return ConversationHandler.END
+    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
