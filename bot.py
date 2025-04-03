@@ -178,34 +178,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    response, new_state = await conversation_mgr.generate_response(
-        update.message.text,
-        context.user_data.get('state', ConversationState.WAITING_INITIAL)
-    )
-    context.user_data['state'] = new_state
-    await update.message.reply_text(response)
-    return new_state
-    user_input = update.message.text.lower().strip()
-    
-    matched_emotion = next(
-        (emotion for emotion in bible_references if emotion in user_input)
-    )
-    
-    if matched_emotion:
-        verse_ref = random.choice(bible_references[matched_emotion])
-        verse_text = fetch_bible_verse(verse_ref)
+    try:
+        if not update.message or not update.message.text:
+            await update.message.reply_text("Please send a text message")
+            return ConversationState.WAITING_INITIAL
+            
+        response, new_state = await conversation_mgr.generate_response(
+            update.message.text,
+            context.user_data.get('state', ConversationState.WAITING_INITIAL)
+        )
         
-        if verse_text:
-            response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
-        else:
-            response = f"Couldn't fetch {verse_ref}. Please try again later."
-    else:
-        response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
-    
-    await update.message.reply_text(response)
-    return new_state
-    return ConversationHandler.END
-
+        if not response or not new_state:  # Add null check
+            raise ValueError("Invalid response from conversation manager")
+            
+        await update.message.reply_text(response)
+        context.user_data['state'] = new_state
+        return new_state
+        
+    except Exception as e:
+        print(f"⚠️ Handle message error: {e}")
+        await update.message.reply_text("Let's start fresh. How are you feeling?")
+        return ConversationState.WAITING_INITIAL
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
     return ConversationHandler.END
@@ -281,13 +274,19 @@ if __name__ == "__main__":
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
         print("❌ Error: Missing required environment variables")
         sys.exit(1)
-    
+
     try:
-        main()
-    except KeyboardInterrupt:
-        print("🛑 Bot stopped by user")
+        application.run_polling()
     except Exception as e:
-        print(f"💥 Error: {e}")
-        sys.exit(1)
+        print(f"Fatal polling error: {e}")
     finally:
         cleanup_lock()
+    # try:
+    #     main()
+    # except KeyboardInterrupt:
+    #     print("🛑 Bot stopped by user")
+    # except Exception as e:
+    #     print(f"💥 Error: {e}")
+    #     sys.exit(1)
+    # finally:
+    #     cleanup_lock()
