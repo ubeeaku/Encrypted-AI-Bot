@@ -242,6 +242,17 @@ def main():
     
     # Create and configure application
     application = create_application()
+
+    # Set up conversation handler
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            WAITING_FOR_EMOTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
     
     # Initialize application with single instance setting
     application = Application.builder() \
@@ -253,17 +264,7 @@ def main():
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
     
-    # Set up conversation handler
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            WAITING_FOR_EMOTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
+    
     print("Current PID:", os.getpid())
     print("Lock file contents:", open('/tmp/bot.lock').read())
     
@@ -278,7 +279,7 @@ def main():
         timeout=30,
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
-        close_loop=False  # Critical for Render
+        close_loop=False,  # Critical for Render
         stop_signals=[]    # Prevent signal handling issues
     )
 
