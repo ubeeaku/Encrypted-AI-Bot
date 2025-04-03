@@ -237,8 +237,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.lower().strip()
     
     matched_emotion = next(
-        (emotion for emotion in bible_references if emotion in user_input),
-        None
+        (emotion for emotion in bible_references if emotion in user_input)
     )
     
     if matched_emotion:
