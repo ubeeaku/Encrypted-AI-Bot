@@ -59,11 +59,11 @@ bible_references = {
 }
 
 # Flask app for health checks
-    app = Flask(__name__)
+app = Flask(__name__)
     
-    @app.route('/')
-    def health_check():
-        return "OK", 200
+@app.route('/')
+def health_check():
+    return "OK", 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
