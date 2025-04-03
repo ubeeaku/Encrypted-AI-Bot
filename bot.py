@@ -96,7 +96,7 @@ async def cleanup_webhook(app):
 async def remove_lock(app):
     """Cleanup lockfile"""
     try:
-        os.remove(LOCKFILE)
+        os.remove(LOCKFILE_PATH)
         print("🔒 Lockfile removed")
     except:
         pass
@@ -204,8 +204,16 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
     return ConversationHandler.END
 
-async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"Update {update} caused error {context.error}")
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log errors and notify user"""
+    print(f"⚠️ Update {update} caused error {context.error}")
+    try:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Sorry, something went wrong. Please try again."
+        )
+    except:
+        pass  # Prevent error loops
 
 def main():
     if check_previous_instance():
