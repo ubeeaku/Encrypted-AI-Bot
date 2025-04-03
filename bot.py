@@ -67,14 +67,6 @@ async def enforce_single_instance():
         print("⚠️ Another instance detected")
         return False
 
-async def cleanup_lock():
-    """Safe lock removal"""
-    try:
-        os.remove(INSTANCE_LOCK)
-        print("🔒 Lock released")
-    except:
-        pass
-
 def create_application():
     """Configure with all necessary safeguards"""
     return Application.builder() \
@@ -112,7 +104,7 @@ async def post_stop(application):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 
 def check_single_instance():
-    """Prevent multiple instances using file lock"""
+    """Ensure only one instance runs"""
     try:
         if os.path.exists(LOCKFILE):
             with open(LOCKFILE, 'r') as f:
@@ -125,8 +117,15 @@ def check_single_instance():
     except Exception as e:
         print(f"Lockfile error: {e}")
         sys.exit(1)
-
 check_single_instance()
+
+def cleanup_lock():
+    """Safe lock removal"""
+    try:
+        os.remove(LOCKFILE)
+        print("🔒 Lock released")
+    except:
+        pass
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
@@ -148,7 +147,6 @@ def fetch_bible_verse(reference):
     except Exception as e:
         print(f"API Error: {e}")
     return None
-
 
 def get_bible_verse(emotion):
     if emotion in bible_references:
@@ -199,6 +197,10 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
 def main():
+    # Check for single instance
+    check_single_instance()
+    atexit.register(cleanup_lock)
+    
     # Start Flask in background
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -239,3 +241,5 @@ if __name__ == "__main__":
         print("Bot stopped by user")
     except Exception as e:
         print(f"Error: {e}")
+    finally:
+        cleanup_lock()
