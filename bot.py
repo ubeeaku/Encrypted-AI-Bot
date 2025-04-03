@@ -46,6 +46,16 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
+# Flask app for health checks
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
 async def enforce_single_instance():
     """Atomic instance check using file locks"""
     try:
@@ -132,22 +142,13 @@ def fetch_bible_verse(reference):
         data = response.json()
         
         if data.get('data', {}).get('passages'):
-            # Extract raw HTML content
             html_content = data['data']['passages'][0]['content']
-            
-            # Method 1: Simple regex cleanup (faster)
-            clean_text = re.sub(r'<[^>]+>', '', html_content)  # Remove all HTML tags
-            clean_text = ' '.join(clean_text.split())  # Normalize whitespace
-            
-            # Method 2: BeautifulSoup (more robust)
-            # soup = BeautifulSoup(html_content, 'html.parser')
-            # clean_text = soup.get_text(separator=' ', strip=True)
-            
-            return clean_text
-            
+            clean_text = re.sub(r'<[^>]+>', '', html_content)
+            return ' '.join(clean_text.split())
     except Exception as e:
-        print(f"API Error: {type(e).__name__} - {str(e)}")
+        print(f"API Error: {e}")
     return None
+
 
 def get_bible_verse(emotion):
     if emotion in bible_references:
@@ -169,91 +170,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.lower().strip()  # clean input
-
-    # Debug: Show what emotion we detected
-    print(f"User input: '{user_input}'")
-    print(f"Matching against: {list(bible_references.keys())}")
+    user_input = update.message.text.lower().strip()
     
-    # Find the closest matching emotion
-    matched_emotion = None
-    for emotion in bible_references.keys():
-        if emotion in user_input:  # Checks for partial matches
-            matched_emotion = emotion
-            break
+    matched_emotion = next(
+        (emotion for emotion in bible_references if emotion in user_input),
+        None
+    )
     
     if matched_emotion:
-        print(f"Matched emotion: {matched_emotion}")
+        verse_ref = random.choice(bible_references[matched_emotion])
+        verse_text = fetch_bible_verse(verse_ref)
         
-        # Get random verse reference for this emotion
-        verse_reference = random.choice(bible_references[matched_emotion])
-        print(f"Selected verse: {verse_reference}")
-        
-        # Fetch verse text from API
-        verse_text = fetch_bible_verse(reference)
         if verse_text:
-            # Remove verse numbers if present (e.g., "3 He healeth..." → "He healeth...")
-            clean_verse = re.sub(r'^\d+\s*', '', verse_text)
-            explanation = (
-                f"This verse reminds us that {matched_emotion} is a natural feeling, "
-                f"but God is always with us to provide comfort and guidance."
-            )
-            response = (
-                f"I'm sorry you're feeling {matched_emotion}. Here's a verse for you:\n\n"
-                f"{verse_reference}\n{verse_text}\n\n"
-                f"What this means:\n{explanation}"
-            )
+            response = f"For {matched_emotion}:\n\n{verse_ref}\n{verse_text}"
         else:
-            # Fallback if API fails
-            response = (
-                f"I wanted to share a verse about {matched_emotion}, but couldn't connect to the Bible API. "
-                f"Try again later or read {verse_reference} in your Bible."
-            )
+            response = f"Couldn't fetch {verse_ref}. Please try again later."
     else:
-        # Default response for no match
-        response = (
-            "I'm here to listen. You can share feelings like:\n"
-            "'sad', 'anxious', 'lonely', 'angry', or 'scared'.\n\n"
-            "Or type /cancel to end our chat."
-        )
+        response = "I'm here to listen. Try words like 'sad', 'anxious', etc."
     
     await update.message.reply_text(response)
-    
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Take care! Type /start to chat again.")
+    await update.message.reply_text("Goodbye! Type /start to chat again.")
     return ConversationHandler.END
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
-app = Flask(__name__)
-
-@app.route('/')
-def health_check():
-    return "OK", 200
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"Error occurred: {context.error}")
-
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
-
-# --- Main Application ---
 def main():
-    if not manage_instance_lock():
-        return  # Exit if couldn't acquire lock
-    
-    if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
-        raise ValueError("Missing or invalid API_BIBLE_KEY")
-    
-    print("🚀 Starting bot with instance control...")
-    
-    # Create and configure application
-    application = create_application()
+    # Start Flask in background
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
 
-    # Set up conversation handler
+    # Create Telegram application
+    application = Application.builder() \
+        .token(TELEGRAM_BOT_TOKEN) \
+        .concurrent_updates(False) \
+        .build()
+
+    # Add handlers
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -263,56 +219,23 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
-    # Initialize application with single instance setting
-    application = Application.builder() \
-        .token(TELEGRAM_BOT_TOKEN) \
-        .concurrent_updates(False) \
-        .read_timeout(30) \
-        .get_updates_read_timeout(30) \
-        .build()
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    
-    
-    print("Current PID:", os.getpid())
-    print("Lock file contents:", open('/tmp/bot.lock').read())
-    
     application.add_handler(conv_handler)
-    application.add_error_handler(error_handler)
-    
-    print("Bot is running...")
-        
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(
-        poll_interval=5.0,
-        timeout=30,
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES
-    )
-    
-    # Keep running until stopped
-    while True:
-        await asyncio.sleep(1)
-    # Start polling with conflict prevention
-    application.run_polling(
-        poll_interval=5.0,
-        timeout=30,
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES,
-        close_loop=False,# Critical for Render
-        bootstrap_retries=0, # Disable retries
-        stop_signals=[]    # Prevent signal handling issues
-    )
 
+    print("Bot starting...")
+    application.run_polling(
+        drop_pending_updates=True,
+        close_loop=False
+    )
     
 if __name__ == "__main__":
+     # Verify environment variables
+    if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
+        print("Error: Missing required environment variables")
+        sys.exit(1)
+    
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
-        print("🛑 Bot stopped by user")
+        print("Bot stopped by user")
     except Exception as e:
-        print(f"💥 Fatal error: {e}")
-    finally:
-        asyncio.run(cleanup_lock())
+        print(f"Error: {e}")
