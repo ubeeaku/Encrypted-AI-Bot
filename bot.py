@@ -185,27 +185,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return 1
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if not update.message or not update.message.text:
-            await update.message.reply_text("Please send a text message")
-            return 1
+    await update.message.reply_text("I'm here to listen...")
+    return 1
+    # try:
+    #     if not update.message or not update.message.text:
+    #         await update.message.reply_text("Please send a text message")
+    #         return 1
             
-        response, new_state = await conversation_mgr.generate_response(
-            update.message.text,
-            context.user_data.get('state', ConversationState.WAITING_INITIAL)
-        )
+    #     response, new_state = await conversation_mgr.generate_response(
+    #         update.message.text,
+    #         context.user_data.get('state', ConversationState.WAITING_INITIAL)
+    #     )
         
-        if not response or not new_state:  # Add null check
-            raise ValueError("Invalid response from conversation manager")
+    #     if not response or not new_state:  # Add null check
+    #         raise ValueError("Invalid response from conversation manager")
             
-        await update.message.reply_text(response)
-        context.user_data['state'] = new_state
-        return 1
+    #     await update.message.reply_text(response)
+    #     context.user_data['state'] = new_state
+    #     return 1
         
-    except Exception as e:
-        print(f"⚠️ Handle message error: {e}")
-        await update.message.reply_text("Let's start fresh. How are you feeling?")
-        return 1
+    # except Exception as e:
+    #     print(f"⚠️ Handle message error: {e}")
+    #     await update.message.reply_text("Let's start fresh. How are you feeling?")
+    #     return 1
         
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
