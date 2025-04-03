@@ -3,6 +3,8 @@ import asyncio
 import requests
 import threading
 import re
+import atexit
+from filelock import FileLock
 from bs4 import BeautifulSoup
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -20,6 +22,7 @@ import sys
 
 # --- Single Instance Enforcement ---
 LOCKFILE = "/tmp/bot.lock"
+lock = FileLock(LOCKFILE + ".lock", timeout=1)
 
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -44,18 +47,33 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
-# --- Single Instance Enforcement ---
-def check_single_instance():
-    """Prevent multiple instances from running"""
+def manage_instance_lock():
+    """Smart lock management for Render's environment"""
     try:
-        # Create a lock file
-        with open('/tmp/bot.lock', 'x') as f:
-            f.write(str(os.getpid()))
-    except FileExistsError:
-        print("Another instance is already running. Exiting.")
-        sys.exit(1)
+        # Try to acquire lock (non-blocking)
+        with lock:
+            # Write our PID
+            with open(LOCKFILE, 'w') as f:
+                f.write(str(os.getpid()))
+            
+            # Register cleanup
+            atexit.register(cleanup_lock)
+            
+            print("🔒 Instance lock acquired")
+            return True
+            
+    except:
+        print("⚠️ Another instance is running - Exiting gracefully")
+        sys.exit(0)
 
-check_single_instance()
+def cleanup_lock():
+    """Safe lock removal"""
+    try:
+        if os.path.exists(LOCKFILE):
+            os.remove(LOCKFILE)
+            print("🔓 Lock released")
+    except:
+        pass
 
 def create_application():
     """Configure bot with conflict prevention settings"""
@@ -235,6 +253,9 @@ def run_flask():
 
 # --- Main Application ---
 def main():
+    if not manage_instance_lock():
+        return  # Exit if couldn't acquire lock
+    
     if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
         raise ValueError("Missing or invalid API_BIBLE_KEY")
     
@@ -279,7 +300,8 @@ def main():
         timeout=30,
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
-        close_loop=False,  # Critical for Render
+        close_loop=False,# Critical for Render
+        bootstrap_retries=0, # Disable retries
         stop_signals=[]    # Prevent signal handling issues
     )
 
