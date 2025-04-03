@@ -14,6 +14,7 @@ from telegram.ext import (
     ConversationHandler
 )
 import random
+import sys
 
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -38,10 +39,23 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
+# --- Single Instance Enforcement ---
+def check_single_instance():
+    """Prevent multiple instances from running"""
+    try:
+        # Create a lock file
+        with open('/tmp/bot.lock', 'x') as f:
+            f.write(str(os.getpid()))
+    except FileExistsError:
+        print("Another instance is already running. Exiting.")
+        sys.exit(1)
+
+check_single_instance()
+
 def create_application():
     """Configure bot with conflict prevention settings"""
     return Application.builder() \
-        .token(TELEGRAM_BOT_TOKEN) \
+        .token(os.getenv("TELEGRAM_BOT_TOKEN")) \
         .concurrent_updates(False) \
         .post_init(post_init) \
         .post_stop(post_stop) \
@@ -49,11 +63,16 @@ def create_application():
 
 async def post_init(application):
     """Runs after bot initialization"""
+    await app.bot.delete_webhook(drop_pending_updates=True)
     print("Bot initialized successfully")
     await application.bot.set_webhook()  # Ensure no webhook is set
 
 async def post_stop(application):
     """Cleanup before shutdown"""
+    try:
+        os.remove('/tmp/bot.lock')
+    except:
+        pass
     print("Bot shutting down gracefully")
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -268,10 +287,11 @@ def main():
 
     # Start polling with conflict prevention
     application.run_polling(
-        poll_interval=3.0,
+        poll_interval=5.0,
         timeout=30,
         drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES
+        allowed_updates=Update.ALL_TYPES,
+        close_loop=False  # Critical for Render
     )
 
 if __name__ == "__main__":
@@ -282,3 +302,4 @@ if __name__ == "__main__":
         print("Bot stopped by user")
     except Exception as e:
         print(f"Fatal error: {e}")
+        sys.exit(1)
