@@ -4,8 +4,6 @@ import requests
 import threading
 import re
 import atexit
-from filelock import FileLock
-from bs4 import BeautifulSoup
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update
@@ -272,28 +270,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except:
         pass  # Prevent error loops
-def create_application():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            ConversationState.WAITING_INITIAL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DISCUSSING_VERSE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ],
-            ConversationState.DEEP_DIVE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    
-    application.add_handler(conv_handler)
-    application.add_error_handler(error_handler)
-    return application
+
 
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
@@ -303,11 +280,6 @@ def main():
         drop_pending_updates=True,
         close_loop=False
     )
-    
-    if check_previous_instance():
-        print("🔄 Waiting for previous instance to terminate...")
-        sys.exit(0)
-
 
     
     # Check for single instance
@@ -325,6 +297,7 @@ def main():
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
+        .post_init(cleanup_webhook) \
         .build()
 
     # Add handlers
@@ -334,6 +307,15 @@ def main():
             WAITING_FOR_EMOTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
             ],
+            ConversationState.WAITING_INITIAL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DISCUSSING_VERSE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ],
+            ConversationState.DEEP_DIVE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+            ]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
