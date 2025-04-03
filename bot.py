@@ -21,8 +21,7 @@ import random
 import sys
 
 # --- Single Instance Enforcement ---
-LOCKFILE = "/tmp/bot.lock"
-lock = FileLock(LOCKFILE + ".lock", timeout=1)
+INSTANCE_LOCK = "/tmp/bot.lock"
 
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -47,36 +46,32 @@ bible_references = {
     "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
 }
 
-def manage_instance_lock():
-    """Smart lock management for Render's environment"""
+async def enforce_single_instance():
+    """Atomic instance check using file locks"""
     try:
-        # Try to acquire lock (non-blocking)
-        with lock:
-            # Write our PID
-            with open(LOCKFILE, 'w') as f:
-                f.write(str(os.getpid()))
-            
-            # Register cleanup
-            atexit.register(cleanup_lock)
-            
-            print("🔒 Instance lock acquired")
-            return True
-            
-    except:
-        print("⚠️ Another instance is running - Exiting gracefully")
-        sys.exit(0)
+        fd = os.open(INSTANCE_LOCK, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
+        with os.fdopen(fd, 'w') as f:
+            f.write(str(os.getpid()))
+        return True
+    except FileExistsError:
+        try:
+            with open(INSTANCE_LOCK, 'r') as f:
+                pid = f.read()
+                print(f"⚠️ Existing instance found (PID: {pid})")
+        except:
+            print("⚠️ Lockfile exists but unreadable")
+        return False
 
 def cleanup_lock():
     """Safe lock removal"""
     try:
-        if os.path.exists(LOCKFILE):
-            os.remove(LOCKFILE)
-            print("🔓 Lock released")
+        os.remove(INSTANCE_LOCK)
+        print("🔒 Lock released")
     except:
         pass
 
 def create_application():
-    """Configure bot with conflict prevention settings"""
+    """Configure with all necessary safeguards"""
     return Application.builder() \
         .token(os.getenv("TELEGRAM_BOT_TOKEN")) \
         .concurrent_updates(False) \
@@ -97,18 +92,17 @@ async def remove_lock(app):
     except:
         pass
 async def post_init(application):
-    """Runs after bot initialization"""
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    print("Bot initialized successfully")
-    await application.bot.set_webhook()  # Ensure no webhook is set
+    """Initialization tasks"""
+    if not await enforce_single_instance():
+        print("Shutting down duplicate instance")
+        await application.stop()
+        sys.exit(0)
+    
+    print("✅ Bot instance verified - Starting poll")
 
 async def post_stop(application):
-    """Cleanup before shutdown"""
-    try:
-        os.remove('/tmp/bot.lock')
-    except:
-        pass
-    print("Bot shutting down gracefully")
+   """Cleanup tasks"""
+    await cleanup_lock()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 
@@ -259,7 +253,7 @@ def main():
     if not API_BIBLE_KEY or API_BIBLE_KEY == "your_api_key_here":
         raise ValueError("Missing or invalid API_BIBLE_KEY")
     
-    print(" 🚀 Starting single-instance bot...")
+    print("🚀 Starting bot with instance control...")
     
     # Create and configure application
     application = create_application()
@@ -293,7 +287,18 @@ def main():
     application.add_error_handler(error_handler)
     
     print("Bot is running...")
-
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(
+        poll_interval=5.0,
+        timeout=30,
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES
+    )
+    
+    # Keep running until stopped
+    while True:
+        await asyncio.sleep(1)
     # Start polling with conflict prevention
     application.run_polling(
         poll_interval=5.0,
@@ -305,14 +310,13 @@ def main():
         stop_signals=[]    # Prevent signal handling issues
     )
 
+    
 if __name__ == "__main__":
-    # Ensure only one instance runs
     try:
-        main()
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("🛑 Bot stopped by user")
     except Exception as e:
         print(f"💥 Fatal error: {e}")
-        try:
-            os.remove(LOCKFILE)
-        except:
-            pass
-        sys.exit(1)
+    finally:
+        asyncio.run(cleanup_lock())
