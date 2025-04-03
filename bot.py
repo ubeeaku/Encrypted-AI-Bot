@@ -17,7 +17,14 @@ from telegram.ext import (
 )
 import random
 import sys
+import logging 
 
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -90,7 +97,7 @@ def create_application():
 async def cleanup_webhook(app):
     """Ensure no webhook conflicts"""
     await app.bot.delete_webhook(drop_pending_updates=True)
-    print("✅ Bot initialized - Ready to poll")
+    logger.info("✅ Bot initialized - Ready to poll")
 
 async def remove_lock(app):
     """Cleanup lockfile"""
@@ -176,14 +183,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
     )
     return 1
-    return WAITING_FOR_EMOTION
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_input = update.message.text.lower()
     try:
         if not update.message or not update.message.text:
             await update.message.reply_text("Please send a text message")
             return 1
-            return ConversationState.WAITING_INITIAL
             
         response, new_state = await conversation_mgr.generate_response(
             update.message.text,
@@ -200,8 +206,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"⚠️ Handle message error: {e}")
         await update.message.reply_text("Let's start fresh. How are you feeling?")
-        return 1
-        return ConversationState.WAITING_INITIAL
+        return 1L
         
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Goodbye! Type /start to chat again.")
@@ -209,7 +214,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and notify user"""
-    print(f"⚠️ Update {update} caused error {context.error}")
+    logger.error(f"⚠️ Update {update} caused error {context.error}")
     try:
         await update.message.reply_text("Sorry, something went wrong. Please try again.")
         # await context.bot.send_message(
@@ -262,7 +267,7 @@ def main():
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
 
-    print("🚀 Bot starting...")
+    logger.info("🚀 Bot starting...")
     application.run_polling(
         poll_interval=5.0,
         drop_pending_updates=True,
@@ -273,16 +278,17 @@ def main():
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
-        print("❌ Error: Missing required environment variables")
+        logger.info("❌ Error: Missing required environment variables")
         sys.exit(1)
 
     try:
         main()
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user")
         # application.run_polling()
     except Exception as e:
-        print(f"💥 Polling error: {e}")
-    finally:
-        cleanup_lock()
+        logger.erro(f"💥 Polling error: {e}")
+    
 
     # try:
     #     main()
