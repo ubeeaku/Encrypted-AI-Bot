@@ -235,6 +235,7 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         user_message = update.message.text.lower()
         
+        # Handle cancellation
         if user_message in ["no", "cancel"]:
             await update.message.reply_text("Okay, no problem. Type /start whenever you'd like to talk again.")
             return ConversationHandler.END
@@ -242,13 +243,37 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Show typing indicator
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         
-        # Enhanced system prompt for better emotional understanding
-        system_prompt = """You are a compassionate Christian counselor. The user is reaching out for help. 
-        Respond with:
-        1. Biblical comfort for emotional expressions
-        2. Practical advice for life problems
-        3. Gentle questions to understand deeper
-        Always be kind, patient, and scripture-based."""
+        # First check if message matches any emotional keywords
+        emotion_keywords = {
+            'alone': ['alone', 'lonely', 'isolated'],
+            'mess': ['mess', 'chaos', 'overwhelmed'],
+            'anxious': ['anxious', 'worried', 'nervous'],
+            'sad': ['sad', 'depressed', 'hopeless'],
+            # Add more emotion mappings here
+        }
+        
+        detected_emotion = None
+        for emotion, keywords in emotion_keywords.items():
+            if any(keyword in user_message for keyword in keywords):
+                detected_emotion = emotion
+                break
+        
+        # If emotion detected, provide Bible verse first
+        if detected_emotion:
+            verse, explanation = get_bible_verse(detected_emotion)
+            await update.message.reply_text(f"{verse}\n\n{explanation}")
+            await asyncio.sleep(1)  # Small delay
+            follow_up = "Would you like to talk more about how you're feeling?"
+            await update.message.reply_text(follow_up, 
+                                          reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True))
+            return GENERAL_CONVERSATION
+        
+        # Otherwise use AI for general conversation
+        system_prompt = """You are a compassionate Christian counselor. Respond with:
+        1. Relevant Bible verses (use format "Book Chapter:Verse")
+        2. Practical advice
+        3. Follow-up questions
+        Be kind, concise, and scripture-focused."""
         
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
@@ -257,26 +282,23 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
-            max_tokens=500
+            max_tokens=300
         )
         
         ai_response = response.choices[0].message.content
         
-        # Fallback for empty responses
+        # Ensure response isn't empty
         if not ai_response.strip():
-            ai_response = "I hear you're struggling. Would you like to share more about what's troubling you?"
+            raise ValueError("Empty AI response")
             
         await update.message.reply_text(ai_response)
         return GENERAL_CONVERSATION
         
     except Exception as e:
-        logger.error(f"Conversation handler error: {e}")
-        fallback_responses = [
-            "I can tell you're going through something difficult. God cares about what you're feeling.",
-            "It sounds like you're carrying a heavy burden. Would praying together help?",
-            "Sometimes putting feelings into words is hard. Take your time."
-        ]
-        await update.message.reply_text(random.choice(fallback_responses))
+        logger.error(f"Conversation error: {e}")
+        # Provide default Bible verse when errors occur
+        verse, explanation = get_bible_verse('sad')  # Default comfort verse
+        await update.message.reply_text(f"I want to offer you this encouragement:\n\n{verse}\n\n{explanation}")
         return GENERAL_CONVERSATION
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
