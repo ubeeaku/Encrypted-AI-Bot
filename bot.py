@@ -277,22 +277,46 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def main_async():
     """Main async entry point"""
+    try:
+        # Verify bot token first
+        bot = Application.builder().token(TELEGRAM_BOT_TOKEN).build().bot
+        me = await bot.get_me()
+        logger.info(f"🤖 Bot @{me.username} verified")
+    
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .post_init(post_init) \
         .post_stop(post_stop) \
         .build()
 
+    # Clear any existing webhook
+        await application.bot.delete_webhook(drop_pending_updates=True)
+    
 # Add conversation handler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            WAITING_FOR_EMOTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    application.add_handler(conv_handler)
-    application.add_error_handler(error_handler)
+            entry_points=[CommandHandler('start', start)],
+            states={
+                WAITING_FOR_EMOTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True
+        )
+        application.add_handler(conv_handler)
+        application.add_error_handler(error_handler)
+
+        # Start polling
+        logger.info("🔄 Starting polling...")
+        await application.run_polling(
+            poll_interval=3.0,
+            timeout=10,
+            drop_pending_updates=True
+        )
+        
+    except Exception as e:
+        logger.error(f"💥 Bot crashed: {e}")
+        raise
 
     try:
         await application.initialize()
