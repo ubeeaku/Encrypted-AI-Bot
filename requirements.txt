@@ -6,3 +6,4 @@ python-dotenv==1.0.0
 tenacity==8.2.3
 filelock==3.13.1
 psutil
+openai
