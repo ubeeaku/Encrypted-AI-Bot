@@ -233,22 +233,50 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle general conversation with AI"""
     try:
-        user_message = update.message.text
-        if user_message.lower() in ["no", "cancel"]:
+        user_message = update.message.text.lower()
+        
+        if user_message in ["no", "cancel"]:
             await update.message.reply_text("Okay, no problem. Type /start whenever you'd like to talk again.")
             return ConversationHandler.END
             
         # Show typing indicator
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         
-        # Generate AI response
-        ai_response = await generate_ai_response(user_message)
+        # Enhanced system prompt for better emotional understanding
+        system_prompt = """You are a compassionate Christian counselor. The user is reaching out for help. 
+        Respond with:
+        1. Biblical comfort for emotional expressions
+        2. Practical advice for life problems
+        3. Gentle questions to understand deeper
+        Always be kind, patient, and scripture-based."""
         
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Fallback for empty responses
+        if not ai_response.strip():
+            ai_response = "I hear you're struggling. Would you like to share more about what's troubling you?"
+            
         await update.message.reply_text(ai_response)
         return GENERAL_CONVERSATION
+        
     except Exception as e:
         logger.error(f"Conversation handler error: {e}")
-        await update.message.reply_text("Sorry, I'm having trouble understanding. Could you rephrase that?")
+        fallback_responses = [
+            "I can tell you're going through something difficult. God cares about what you're feeling.",
+            "It sounds like you're carrying a heavy burden. Would praying together help?",
+            "Sometimes putting feelings into words is hard. Take your time."
+        ]
+        await update.message.reply_text(random.choice(fallback_responses))
         return GENERAL_CONVERSATION
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
