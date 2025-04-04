@@ -7,6 +7,7 @@ import sys
 import atexit
 import re
 import psutil
+import openai  # Added for AI conversations
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update, ReplyKeyboardMarkup
@@ -34,12 +35,17 @@ logger = logging.getLogger(__name__)
 # --- Constants ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BIBLE_KEY = os.getenv("API_BIBLE_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # New for AI conversations
 WAITING_FOR_EMOTION = 1
+GENERAL_CONVERSATION = 2  # New state for AI conversations
 LOCKFILE_PATH = "/tmp/bot.lock"
 
 # API.Bible configuration
 API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
 DEFAULT_BIBLE_ID = "de4e12af7f28f599-01"
+
+# Initialize OpenAI
+openai.api_key = OPENAI_API_KEY
 
 # Dictionary of emotions and Bible references
 bible_references = {
@@ -52,7 +58,12 @@ bible_references = {
     "overwhelmed": ["Matthew 11:28-30", "Psalm 61:2", "2 Corinthians 12:9"],
     "guilty": ["1 John 1:9", "Psalm 103:12", "Romans 8:1"],
     "insecure": ["Psalm 139:14", "Ephesians 2:10", "Jeremiah 1:5"],
-    "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"]
+    "grieving": ["Revelation 21:4", "Psalm 34:18", "Mathew 5:4"],
+    "hopeless": ["Romans 15:13", "Jeremiah 29:11", "Psalm 42:11"],
+    "tempted": ["1 Corinthians 10:13", "James 4:7", "Hebrews 2:18"],
+    "thankful": ["1 Thessalonians 5:18", "Psalm 107:1", "Colossians 3:15"],
+    "weary": ["Matthew 11:28", "Galatians 6:9", "Isaiah 40:31"],
+    "doubtful": ["Mark 9:24", "James 1:6", "Matthew 21:21"]
 }
 
 # Flask app for health checks
@@ -134,14 +145,36 @@ def get_bible_verse(emotion):
         "This verse reminds us that Jesus has overcome the world's challenges."
     )
 
+async def generate_ai_response(prompt):
+    """Generate AI response using OpenAI"""
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a compassionate Christian counselor. Provide biblical wisdom and comfort in your responses."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"AI Error: {e}")
+        return "I'm having trouble understanding. Could you please rephrase your question?"
+
 # --- Handler Functions ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     try:
+        logger.info(f"🚩 Start command from {update.effective_user.id}")
         await update.message.reply_text(
-            "Hello! How are you feeling? (sad, anxious, lonely, angry, etc)",
+            "Hello! I'm here to help. You can:\n"
+            "1. Share how you're feeling (sad, anxious, etc)\n"
+            "2. Ask me any question about faith or life\n"
+            "3. Get biblical encouragement\n\n"
+            "How are you feeling today?",
             reply_markup=ReplyKeyboardMarkup(
-                [list(bible_references.keys())], 
+                [["I need a verse"], ["I want to talk"]], 
                 one_time_keyboard=True
             )
         )
@@ -151,20 +184,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sorry, something went wrong. Please try /start again.")
         return ConversationHandler.END
 
+async def handle_emotion_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle user's choice between verse or conversation"""
+    try:
+        text = update.message.text.lower()
+        
+        if "verse" in text:
+            await update.message.reply_text(
+                "How are you feeling?",
+                reply_markup=ReplyKeyboardMarkup(
+                    [list(bible_references.keys())], 
+                    one_time_keyboard=True
+                )
+            )
+            return WAITING_FOR_EMOTION
+        elif "talk" in text:
+            await update.message.reply_text(
+                "I'm here to listen. What would you like to talk about?",
+                reply_markup=ReplyKeyboardMarkup([["/cancel"]], one_time_keyboard=True)
+            )
+            return GENERAL_CONVERSATION
+        else:
+            await update.message.reply_text("Please choose 'I need a verse' or 'I want to talk'")
+            return WAITING_FOR_EMOTION
+    except Exception as e:
+        logger.error(f"Choice handler error: {e}")
+        await update.message.reply_text("Sorry, I didn't understand. Please try /start again.")
+        return ConversationHandler.END
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user messages"""
+    """Handle user messages for emotion-based verses"""
     try:
         text = update.message.text.lower()
         if text in bible_references:
             verse, message = get_bible_verse(text)
             await update.message.reply_text(f"{verse}\n\n{message}")
+            await update.message.reply_text("Would you like to talk more about this?", 
+                                          reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True))
+            return GENERAL_CONVERSATION if text == "yes" else WAITING_FOR_EMOTION
         else:
             await update.message.reply_text("Please choose one of the suggested emotions")
-        return WAITING_FOR_EMOTION
+            return WAITING_FOR_EMOTION
     except Exception as e:
         logger.error(f"Message handler error: {e}")
         await update.message.reply_text("Sorry, I didn't understand that. Please try /start again.")
         return ConversationHandler.END
+
+async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle general conversation with AI"""
+    try:
+        user_message = update.message.text
+        if user_message.lower() in ["no", "cancel"]:
+            await update.message.reply_text("Okay, no problem. Type /start whenever you'd like to talk again.")
+            return ConversationHandler.END
+            
+        # Show typing indicator
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        
+        # Generate AI response
+        ai_response = await generate_ai_response(user_message)
+        
+        await update.message.reply_text(ai_response)
+        return GENERAL_CONVERSATION
+    except Exception as e:
+        logger.error(f"Conversation handler error: {e}")
+        await update.message.reply_text("Sorry, I'm having trouble understanding. Could you rephrase that?")
+        return GENERAL_CONVERSATION
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /cancel command"""
@@ -196,7 +281,11 @@ async def run_bot():
             entry_points=[CommandHandler('start', start)],
             states={
                 WAITING_FOR_EMOTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_emotion_choice),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+                ],
+                GENERAL_CONVERSATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_conversation)
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
@@ -229,7 +318,7 @@ async def run_bot():
 
 def main():
     """Main entry point"""
-    if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
+    if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY, OPENAI_API_KEY]):
         logger.error("❌ Missing required environment variables")
         return
     
