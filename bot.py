@@ -289,7 +289,7 @@ if __name__ == "__main__":
 
     try:
         main()
-        # application.run_polling()
+        application.run_polling()
     except Exception as e:
         logger.error(f"💥 Polling error: {e}")
         sys.exit(1)
