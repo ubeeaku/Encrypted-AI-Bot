@@ -77,7 +77,7 @@ def run_flask():
 async def enforce_single_instance():
     """Atomic instance check using file locks"""
     try:
-        fd = os.open(INSTANCE_LOCK, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
+        fd = os.open(LOCKFILE_PATH, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
         with os.fdopen(fd, 'w') as f:
             f.write(str(os.getpid()))
         return True
@@ -215,7 +215,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and notify user"""
-    logger.error(f"⚠️ Update {update} caused error {context.error}")
+    logger.error(f"⚠️ Error:  {context.error}")
     try:
         if update and update.message:
             await update.message.reply_text("Sorry, something went wrong. Please try again.")
@@ -243,7 +243,7 @@ def main():
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
-        .post_init(cleanup_webhook) \
+        .post_init(lambda app: logger.info("Single instance verified")) \
         .build()
 
     # Add conversation handler
@@ -274,11 +274,11 @@ def main():
 
     logger.info("🚀 Bot starting...")
     application.run_polling(
-        poll_interval=10.0,
+        poll_interval=15.0,
         drop_pending_updates=True,
-        close_loop=False,
         bootstrap_retries=0,  # Disable retries
-        stop_signals=[]
+        close_loop=False,
+        # stop_signals=[]
     )
     
 if __name__ == "__main__":
@@ -289,8 +289,6 @@ if __name__ == "__main__":
 
     try:
         main()
-    except KeyboardInterrupt:
-        logger.info("🛑 Bot stopped by user")
         # application.run_polling()
     except Exception as e:
         logger.erro(f"💥 Polling error: {e}")
