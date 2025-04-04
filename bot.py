@@ -3,6 +3,7 @@ import asyncio
 import requests
 import threading
 import re
+import psutil
 import atexit
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -84,16 +85,24 @@ def run_flask():
     # app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 async def enforce_single_instance():
-    """More reliable instance check"""
+    """Improved instance check that won't detect current process"""
+    current_pid = os.getpid()
+    
     try:
         if os.path.exists(LOCKFILE_PATH):
             with open(LOCKFILE_PATH, 'r') as f:
-                pid = f.read().strip()
-                if pid and os.path.exists(f"/proc/{pid}"):
-                    logger.warning(f"⚠️ Active instance detected (PID: {pid})")
-                    return False
+                pid_str = f.read().strip()
+                if pid_str and pid_str.isdigit():
+                    existing_pid = int(pid_str)
+                    
+                    # Check if the process is actually running and isn't ourselves
+                    if existing_pid != current_pid and psutil.pid_exists(existing_pid):
+                        logger.warning(f"Active instance detected (PID: {existing_pid})")
+                        return False
+        
+        # Create/update lockfile
         with open(LOCKFILE_PATH, 'w') as f:
-            f.write(str(os.getpid()))
+            f.write(str(current_pid))
         return True
     except Exception as e:
         logger.error(f"Instance check error: {e}")
@@ -162,12 +171,14 @@ def check_single_instance():
 async def cleanup_lock():
     """Safe lock removal"""
     try:
-        os.remove(LOCKFILE_PATH)
-        logger.info("🔒 Lock released")
-    except FileNotFoundError:
-        pass
+        if os.path.exists(LOCKFILE_PATH):
+            with open(LOCKFILE_PATH, 'r') as f:
+                if f.read().strip() == str(os.getpid()):
+                    os.remove(LOCKFILE_PATH)
+                    logger.info("🔒 Lock released")
     except Exception as e:
         logger.error(f"Lock cleanup error: {e}")
+
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
@@ -251,7 +262,27 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass  # Prevent error loops
 
+async def run_bot():
+    """Main bot running routine"""
+    application = Application.builder() \
+        .token(TELEGRAM_BOT_TOKEN) \
+        .post_init(post_init) \
+        .post_stop(post_stop) \
+        .build()
 
+# Add conversation handler
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            WAITING_FOR_EMOTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    application.add_handler(conv_handler)
+    application.add_error_handler(error_handler)
+
+    await application.run_polling()
+    
 def main():
     # Start Flask
     threading.Thread(target=run_flask, daemon=True).start()
@@ -272,14 +303,7 @@ def main():
         .post_stop(post_stop) \
         .build()
 
-    # Add conversation handler
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            WAITING_FOR_EMOTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
+    
     # conv_handler = ConversationHandler(
     #     entry_points=[CommandHandler('start', start)],
     #     states={
@@ -295,18 +319,18 @@ def main():
     #     },
     #     fallbacks=[CommandHandler('cancel', cancel)]
     # )
-    application.add_handler(conv_handler)
-    application.add_error_handler(error_handler)
+    
 
 
     # Run the application properly
     try:
-        logger.info("🚀 Bot starting...")
-        application.run_polling(
-            poll_interval=5.0,
-            drop_pending_updates=True,
-            close_loop=False
-        )
+        asyncio.run(run_bot())
+        # logger.info("🚀 Bot starting...")
+        # application.run_polling(
+        #     poll_interval=5.0,
+        #     drop_pending_updates=True,
+        #     close_loop=False
+        # )
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user")
     except Exception as e:
