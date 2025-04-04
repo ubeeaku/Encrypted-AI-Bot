@@ -319,6 +319,37 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update and update.message:
         await update.message.reply_text("Sorry, something went wrong. Please try again.")
 
+async def post_init(application: Application):
+    """Run after bot is initialized"""
+    try:
+        logger.info(f"✅ Bot initialized - PID: {os.getpid()}")
+        # Verify single instance
+        if not await enforce_single_instance():
+            logger.error("Duplicate instance detected")
+            await application.stop()
+            sys.exit(1)
+            
+        # Set bot commands
+        await application.bot.set_my_commands([
+            ("start", "Begin conversation"),
+            ("cancel", "End conversation")
+        ])
+        logger.info("⌨️ Commands set up")
+        
+    except Exception as e:
+        logger.error(f"Post-init error: {e}")
+        raise
+
+async def post_stop(application: Application):
+    """Run before bot is stopped"""
+    try:
+        logger.info("🛑 Stopping bot...")
+        await cleanup_lock()
+    except Exception as e:
+        logger.error(f"Post-stop error: {e}")
+    finally:
+        logger.info("🧹 Cleanup complete")
+        
 async def run_bot():
     """Main bot running routine with proper lifecycle management"""
     application = None
@@ -379,7 +410,7 @@ async def run_bot():
         logger.info("🧹 Cleaning up resources...")
         if application:
             try:
-                if application.updater.running:
+                if hasattr(application, 'updater') and application.updater.running:
                     await application.updater.stop()
                 await application.stop()
                 await application.shutdown()
