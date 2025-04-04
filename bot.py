@@ -2,9 +2,13 @@ import os
 import asyncio
 import requests
 import threading
+import random
+import sys
+import atexit
 import re
 import psutil
 from flask import Flask
+from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
