@@ -320,55 +320,80 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sorry, something went wrong. Please try again.")
 
 async def run_bot():
-    """Main bot running routine"""
+    """Main bot running routine with proper lifecycle management"""
     application = None
     try:
-        # Enhanced instance check
+        # 1. Instance check
         if not await enforce_single_instance():
             logger.error("❌ Another instance is running. Exiting.")
-            sys.exit(1)
-            
+            return
+
+        # 2. Initialize application
         application = Application.builder() \
             .token(TELEGRAM_BOT_TOKEN) \
-            .post_init(lambda _: logger.info("✅ Instance verified")) \
-            .post_stop(lambda _: logger.info("🛑 Bot stopped")) \
+            .post_init(post_init) \
+            .post_stop(post_stop) \
             .build()
 
-        # ... (rest of your bot setup code)
+        # 3. Add handlers
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                WAITING_FOR_EMOTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_emotion_choice),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+                ],
+                GENERAL_CONVERSATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_conversation)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True
+        )
+        application.add_handler(conv_handler)
+        application.add_error_handler(error_handler)
 
-        # Start with clean polling
+        # 4. Start with clean state
+        await application.initialize()
         await application.bot.delete_webhook(drop_pending_updates=True)
+        
+        # 5. Start polling
         logger.info("🔄 Starting polling...")
-        await application.run_polling(
-            poll_interval=5.0,
+        await application.start()
+        await application.updater.start_polling(
+            poll_interval=3.0,
             timeout=30,
             drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES
         )
+        
+        # 6. Keep alive
+        while True:
+            await asyncio.sleep(1)
 
-    except Conflict as e:
-        logger.error(f"🚨 Telegram conflict: {e}")
-        logger.info("Attempting graceful restart...")
-        if application:
-            await application.stop()
-        sys.exit(1)  # Let Render restart the service
+    except asyncio.CancelledError:
+        logger.info("🛑 Received shutdown signal")
     except Exception as e:
         logger.error(f"💥 Fatal error: {e}")
     finally:
-        await cleanup_lock()
+        logger.info("🧹 Cleaning up resources...")
         if application:
-            await application.stop()
+            try:
+                if application.updater.running:
+                    await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+            except Exception as e:
+                logger.error(f"Cleanup error: {e}")
+        await cleanup_lock()
+        logger.info("🎯 Cleanup complete")
 
 def main():
-    """Main entry point"""
-    if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY, OPENAI_API_KEY]):
-        logger.error("❌ Missing required environment variables")
-        return
-    
+    """Synchronous entry point"""
     # Start Flask in a separate thread
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Run the bot
+
+    # Run the bot with proper cleanup
     try:
         asyncio.run(run_bot())
     except KeyboardInterrupt:
@@ -379,4 +404,8 @@ def main():
         logger.info("🏁 Application terminated")
 
 if __name__ == "__main__":
+    if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY, OPENAI_API_KEY]):
+        logger.error("❌ Missing required environment variables")
+        sys.exit(1)
+        
     main()
