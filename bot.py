@@ -301,8 +301,6 @@ async def debug_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📨 Received update: {update}")
     await update.message.reply_text("I received your message!")
 
-# Add this right after creating your application
-application.add_handler(MessageHandler(filters.ALL, debug_updates))
 
 async def main_async():
     """Main async entry point with proper lifecycle management"""
@@ -319,6 +317,8 @@ async def main_async():
             .post_init(post_init) \
             .post_stop(post_stop) \
             .build()
+        # Add this right after creating your application
+        application.add_handler(MessageHandler(filters.ALL, debug_updates))
         # Enable verbose logging
         application.add_error_handler(error_handler)
         application.bot_data['dispatcher'].update_verbose = True
