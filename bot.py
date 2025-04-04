@@ -243,7 +243,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   try:
+    try:
         text = update.message.text.lower()
         if text in bible_references:
             verse, message = get_bible_verse(text)
