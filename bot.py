@@ -82,7 +82,7 @@ async def enforce_single_instance():
             f.write(str(os.getpid()))
         return True
     except FileExistsError:
-        print("⚠️ Another instance detected")
+        logger.error("⚠️ Another instance detected")
         return False
 
 def create_application():
@@ -109,11 +109,11 @@ async def remove_lock(app):
 async def post_init(application):
     """Initialization tasks"""
     if not await enforce_single_instance():
-        print("Shutting down duplicate instance")
+        logger.error("Shutting down duplicate instance")
         await application.stop()
         sys.exit(0)
     
-    print("✅ Bot instance verified - Starting poll")
+    logger.info("✅ Bot instance verified - Starting poll")
 
 async def post_stop(application):
     """Cleanup tasks"""
@@ -136,11 +136,11 @@ def check_single_instance():
         print(f"Lockfile error: {e}")
         sys.exit(1)
 
-def cleanup_lock():
+async def cleanup_lock():
     """Safe lock removal"""
     try:
         os.remove(LOCKFILE_PATH)
-        print("🔒 Lock released")
+        logger.info("🔒 Lock released")
     except:
         pass
 
@@ -243,14 +243,15 @@ def main():
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .concurrent_updates(False) \
-        .post_init(lambda app: logger.info("Single instance verified")) \
+        .post_init(post_init) \
+        .post_stop(post_stop) \
         .build()
 
     # Add conversation handler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
+            WAITING_FOR_EMOTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
@@ -273,26 +274,27 @@ def main():
     application.add_error_handler(error_handler)
 
     logger.info("🚀 Bot starting...")
-    application.run_polling(
-        poll_interval=15.0,
-        drop_pending_updates=True,
-        bootstrap_retries=0,  # Disable retries
-        close_loop=False,
-        # stop_signals=[]
-    )
+
+    # Run the application properly
+    try:
+        application.run_polling(
+            poll_interval=15.0,
+            drop_pending_updates=True,
+            close_loop=False
+        )
+    except asyncio.CancelledError:
+        logger.info("🛑 Bot stopped gracefully")
+    except Exception as e:
+        logger.error(f"💥 Polling error: {e}")
+        sys.exit(1)
     
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
-        logger.info("❌ Error: Missing required environment variables")
+        logger.error("❌ Error: Missing required environment variables")
         sys.exit(1)
 
-    try:
-        main()
-        application.run_polling()
-    except Exception as e:
-        logger.error(f"💥 Polling error: {e}")
-        sys.exit(1)
+    main()
     
 
     # try:
