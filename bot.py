@@ -82,7 +82,7 @@ def run_flask():
         logger.error(f"Failed to start Flask: {e}")
 
 async def enforce_single_instance():
-    """Ensure only one instance runs"""
+    """More robust instance checking"""
     current_pid = os.getpid()
     try:
         if os.path.exists(LOCKFILE_PATH):
@@ -90,15 +90,22 @@ async def enforce_single_instance():
                 pid_str = f.read().strip()
                 if pid_str and pid_str.isdigit():
                     existing_pid = int(pid_str)
+                    # Check if process exists AND isn't ourselves
                     if existing_pid != current_pid and psutil.pid_exists(existing_pid):
-                        logger.warning(f"Active instance detected (PID: {existing_pid})")
-                        return False
+                        try:
+                            # Send SIGTERM to the existing process
+                            os.kill(existing_pid, 15)
+                            logger.warning(f"Terminated duplicate instance (PID: {existing_pid})")
+                        except:
+                            logger.warning(f"Found stale lockfile from PID: {existing_pid}")
+                        os.remove(LOCKFILE_PATH)
         
+        # Create new lockfile
         with open(LOCKFILE_PATH, 'w') as f:
             f.write(str(current_pid))
         return True
     except Exception as e:
-        logger.error(f"Instance check error: {e}")
+        logger.error(f"Instance check failed: {e}")
         return False
 
 async def cleanup_lock():
@@ -316,55 +323,41 @@ async def run_bot():
     """Main bot running routine"""
     application = None
     try:
-        # Verify single instance
+        # Enhanced instance check
         if not await enforce_single_instance():
-            logger.error("Duplicate instance detected")
-            return
-        
-        # Initialize application
+            logger.error("❌ Another instance is running. Exiting.")
+            sys.exit(1)
+            
         application = Application.builder() \
             .token(TELEGRAM_BOT_TOKEN) \
+            .post_init(lambda _: logger.info("✅ Instance verified")) \
+            .post_stop(lambda _: logger.info("🛑 Bot stopped")) \
             .build()
 
-        # Add handlers
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start)],
-            states={
-                WAITING_FOR_EMOTION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_emotion_choice),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-                ],
-                GENERAL_CONVERSATION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_conversation)
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
-        )
-        application.add_handler(conv_handler)
-        application.add_error_handler(error_handler)
+        # ... (rest of your bot setup code)
 
-        # Start polling
-        logger.info("🚀 Starting bot...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-        
-        # Keep the bot running
-        while True:
-            await asyncio.sleep(3600)
-            
-    except asyncio.CancelledError:
-        logger.info("🛑 Received shutdown signal")
-    except Exception as e:
-        logger.error(f"💥 Bot crashed: {e}")
-    finally:
-        logger.info("🧹 Cleaning up resources...")
+        # Start with clean polling
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("🔄 Starting polling...")
+        await application.run_polling(
+            poll_interval=5.0,
+            timeout=30,
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
+        )
+
+    except Conflict as e:
+        logger.error(f"🚨 Telegram conflict: {e}")
+        logger.info("Attempting graceful restart...")
         if application:
-            await application.updater.stop()
             await application.stop()
-            await application.shutdown()
+        sys.exit(1)  # Let Render restart the service
+    except Exception as e:
+        logger.error(f"💥 Fatal error: {e}")
+    finally:
         await cleanup_lock()
+        if application:
+            await application.stop()
 
 def main():
     """Main entry point"""
