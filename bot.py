@@ -73,15 +73,22 @@ def health_check():
     return "OK", 200
 
 def run_flask():
-    """Run Flask server with port conflict handling"""
+    """Run Flask server with dynamic port handling"""
     port = int(os.environ.get("PORT", 10000))
-    try:
-        app.run(host='0.0.0.0', port=port)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            logger.warning(f"Port {port} in use, Flask server already running")
-        else:
-            raise
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            app.run(host='0.0.0.0', port=port)
+            break
+        except OSError as e:
+            if "Address already in use" in str(e):
+                logger.warning(f"Port {port} in use, trying port {port + 1}")
+                port += 1
+                if attempt == max_retries - 1:
+                    logger.error("Failed to find available port")
+                    raise
+            else:
+                raise
     # app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 async def enforce_single_instance():
@@ -179,6 +186,12 @@ async def cleanup_lock():
     except Exception as e:
         logger.error(f"Lock cleanup error: {e}")
 
+async def post_stop(application):
+    """Cleanup tasks"""
+    try:
+        await cleanup_lock()
+    except Exception as e:
+        logger.error(f"Shutdown error: {e}")
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
@@ -262,8 +275,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass  # Prevent error loops
 
-async def run_bot():
-    """Main bot running routine"""
+async def main_async():
+    """Main async entry point"""
     application = Application.builder() \
         .token(TELEGRAM_BOT_TOKEN) \
         .post_init(post_init) \
@@ -281,7 +294,17 @@ async def run_bot():
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
 
-    await application.run_polling()
+    try:
+        await application.initialize()
+        await application.start()
+        logger.info("🚀 Bot started successfully")
+        while True:
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await application.stop()
+        await application.shutdown()
     
 def main():
     # Start Flask
@@ -324,7 +347,7 @@ def main():
 
     # Run the application properly
     try:
-        asyncio.run(run_bot())
+        asyncio.run(main_async())
         # logger.info("🚀 Bot starting...")
         # application.run_polling(
         #     poll_interval=5.0,
@@ -337,7 +360,9 @@ def main():
         logger.error(f"💥 Fatal error: {e}")
     finally:
         # Ensure cleanup runs
-        asyncio.run(cleanup_lock())
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(cleanup_lock())
+        loop.close()
     
 if __name__ == "__main__":
      # Verify environment variables
