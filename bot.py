@@ -282,18 +282,18 @@ async def main_async():
         bot = Application.builder().token(TELEGRAM_BOT_TOKEN).build().bot
         me = await bot.get_me()
         logger.info(f"🤖 Bot @{me.username} verified")
-    
-    application = Application.builder() \
-        .token(TELEGRAM_BOT_TOKEN) \
-        .post_init(post_init) \
-        .post_stop(post_stop) \
-        .build()
+        
+        application = Application.builder() \
+            .token(TELEGRAM_BOT_TOKEN) \
+            .post_init(post_init) \
+            .post_stop(post_stop) \
+            .build()
 
     # Clear any existing webhook
         await application.bot.delete_webhook(drop_pending_updates=True)
     
 # Add conversation handler
-    conv_handler = ConversationHandler(
+        conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
             states={
                 WAITING_FOR_EMOTION: [
@@ -345,13 +345,13 @@ def main():
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Create application ONCE
-    application = Application.builder() \
-        .token(TELEGRAM_BOT_TOKEN) \
-        .concurrent_updates(False) \
-        .post_init(post_init) \
-        .post_stop(post_stop) \
-        .build()
+    # # Create application ONCE
+    # application = Application.builder() \
+    #     .token(TELEGRAM_BOT_TOKEN) \
+    #     .concurrent_updates(False) \
+    #     .post_init(post_init) \
+    #     .post_stop(post_stop) \
+    #     .build()
 
     
     # conv_handler = ConversationHandler(
