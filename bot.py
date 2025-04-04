@@ -72,27 +72,50 @@ def health_check():
     return "OK", 200
 
 def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    """Run Flask server with port conflict handling"""
+    port = int(os.environ.get("PORT", 10000))
+    try:
+        app.run(host='0.0.0.0', port=port)
+    except OSError as e:
+        if "Address already in use" in str(e):
+            logger.warning(f"Port {port} in use, Flask server already running")
+        else:
+            raise
+    # app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 async def enforce_single_instance():
-    """Atomic instance check using file locks"""
+    """More reliable instance check"""
     try:
-        fd = os.open(LOCKFILE_PATH, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
-        with os.fdopen(fd, 'w') as f:
+        if os.path.exists(LOCKFILE_PATH):
+            with open(LOCKFILE_PATH, 'r') as f:
+                pid = f.read().strip()
+                if pid and os.path.exists(f"/proc/{pid}"):
+                    logger.warning(f"⚠️ Active instance detected (PID: {pid})")
+                    return False
+        with open(LOCKFILE_PATH, 'w') as f:
             f.write(str(os.getpid()))
         return True
-    except FileExistsError:
-        logger.error("⚠️ Another instance detected")
+    except Exception as e:
+        logger.error(f"Instance check error: {e}")
         return False
+    # """Atomic instance check using file locks"""
+    # try:
+    #     fd = os.open(LOCKFILE_PATH, os.O_CREAT | os.O_WRONLY | os.O_EXCL)
+    #     with os.fdopen(fd, 'w') as f:
+    #         f.write(str(os.getpid()))
+    #     return True
+    # except FileExistsError:
+    #     logger.error("⚠️ Another instance detected")
+    #     return False
 
-def create_application():
-    """Configure with all necessary safeguards"""
-    return Application.builder() \
-        .token(os.getenv("TELEGRAM_BOT_TOKEN")) \
-        .concurrent_updates(False) \
-        .post_init(post_init) \
-        .post_stop(post_stop) \
-        .build()
+# def create_application():
+#     """Configure with all necessary safeguards"""
+#     return Application.builder() \
+#         .token(os.getenv("TELEGRAM_BOT_TOKEN")) \
+#         .concurrent_updates(False) \
+#         .post_init(post_init) \
+#         .post_stop(post_stop) \
+#         .build()
 
 async def cleanup_webhook(app):
     """Ensure no webhook conflicts"""
@@ -109,17 +132,17 @@ async def remove_lock(app):
 async def post_init(application):
     """Initialization tasks"""
     if not await enforce_single_instance():
-        logger.error("Shutting down duplicate instance")
+        logger.error("Duplicate instance detected")
         await application.stop()
         sys.exit(0)
-    
     logger.info("✅ Bot instance verified - Starting poll")
 
 async def post_stop(application):
     """Cleanup tasks"""
     await cleanup_lock()
+    logger.info("🛑 Bot stopped")
     
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+# @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 
 def check_single_instance():
     """Ensure only one instance runs"""
@@ -141,8 +164,10 @@ async def cleanup_lock():
     try:
         os.remove(LOCKFILE_PATH)
         logger.info("🔒 Lock released")
-    except:
+    except FileNotFoundError:
         pass
+    except Exception as e:
+        logger.error(f"Lock cleanup error: {e}")
 
 # --- Helper Functions ---
 def fetch_bible_verse(reference):
@@ -273,25 +298,27 @@ def main():
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
 
-    logger.info("🚀 Bot starting...")
 
     # Run the application properly
     try:
+        logger.info("🚀 Bot starting...")
         application.run_polling(
-            poll_interval=15.0,
+            poll_interval=5.0,
             drop_pending_updates=True,
             close_loop=False
         )
-    except asyncio.CancelledError:
-        logger.info("🛑 Bot stopped gracefully")
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user")
     except Exception as e:
-        logger.error(f"💥 Polling error: {e}")
-        sys.exit(1)
+        logger.error(f"💥 Fatal error: {e}")
+    finally:
+        # Ensure cleanup runs
+        asyncio.run(cleanup_lock())
     
 if __name__ == "__main__":
      # Verify environment variables
     if not all([TELEGRAM_BOT_TOKEN, API_BIBLE_KEY]):
-        logger.error("❌ Error: Missing required environment variables")
+        logger.error("❌ Missing required environment variables")
         sys.exit(1)
 
     main()
