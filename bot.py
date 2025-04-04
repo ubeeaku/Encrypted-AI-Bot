@@ -317,6 +317,9 @@ async def main_async():
     except Exception as e:
         logger.error(f"💥 Bot crashed: {e}")
         raise
+    finally:  # Optional but recommended for cleanup
+        logger.info("🧹 Cleaning up resources...")
+        await cleanup_lock()
 
     try:
         await application.initialize()
@@ -384,9 +387,12 @@ def main():
         logger.error(f"💥 Fatal error: {e}")
     finally:
         # Ensure cleanup runs
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(cleanup_lock())
-        loop.close()
+        try:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(cleanup_lock())
+            loop.close()
+        except:
+            pass
     
 if __name__ == "__main__":
      # Verify environment variables
