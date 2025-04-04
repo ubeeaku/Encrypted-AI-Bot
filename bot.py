@@ -276,23 +276,25 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass  # Prevent error loops
 
 async def main_async():
-    """Main async entry point"""
+    """Main async entry point with proper lifecycle management"""
+    application = None
     try:
-        # Verify bot token first
+        # 1. Verify bot token
         bot = Application.builder().token(TELEGRAM_BOT_TOKEN).build().bot
         me = await bot.get_me()
         logger.info(f"🤖 Bot @{me.username} verified")
         
+        # 2. Create application
         application = Application.builder() \
             .token(TELEGRAM_BOT_TOKEN) \
             .post_init(post_init) \
             .post_stop(post_stop) \
             .build()
 
-    # Clear any existing webhook
+        # 3. Clear webhook and set up handlers
+        await application.initialize()
         await application.bot.delete_webhook(drop_pending_updates=True)
-    
-# Add conversation handler
+        
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
             states={
@@ -306,32 +308,26 @@ async def main_async():
         application.add_handler(conv_handler)
         application.add_error_handler(error_handler)
 
-        # Start polling
+        # 4. Start polling
         logger.info("🔄 Starting polling...")
-        await application.run_polling(
-            poll_interval=3.0,
-            timeout=10,
-            drop_pending_updates=True
-        )
-        
-    except Exception as e:
-        logger.error(f"💥 Bot crashed: {e}")
-        raise
-    finally:  # Optional but recommended for cleanup
-        logger.info("🧹 Cleaning up resources...")
-        await cleanup_lock()
-
-    try:
-        await application.initialize()
         await application.start()
         logger.info("🚀 Bot started successfully")
+        
+        # Keep the application running
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(3600)  # Sleep for 1 hour
+            
     except asyncio.CancelledError:
-        pass
+        logger.info("🛑 Received shutdown signal")
+    except Exception as e:
+        logger.error(f"💥 Bot crashed: {e}")
     finally:
-        await application.stop()
-        await application.shutdown()
+        logger.info("🧹 Cleaning up resources...")
+        if application:
+            await application.stop()
+            await application.shutdown()
+        await cleanup_lock()
+        logger.info("🎯 Cleanup complete")
     
 def main():
     # Start Flask
@@ -341,9 +337,9 @@ def main():
     check_single_instance()
     atexit.register(cleanup_lock)
     
-    # Start Flask health check
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    # # Start Flask health check
+    # flask_thread = threading.Thread(target=run_flask, daemon=True)
+    # flask_thread.start()
 
     # # Create application ONCE
     # application = Application.builder() \
@@ -375,24 +371,20 @@ def main():
     # Run the application properly
     try:
         asyncio.run(main_async())
-        # logger.info("🚀 Bot starting...")
-        # application.run_polling(
-        #     poll_interval=5.0,
-        #     drop_pending_updates=True,
-        #     close_loop=False
-        # )
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user")
     except Exception as e:
         logger.error(f"💥 Fatal error: {e}")
     finally:
+        logger.info("🏁 Application terminated")
+
         # Ensure cleanup runs
-        try:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(cleanup_lock())
-            loop.close()
-        except:
-            pass
+        # try:
+        #     loop = asyncio.new_event_loop()
+        #     loop.run_until_complete(cleanup_lock())
+        #     loop.close()
+        # except:
+        #     pass
     
 if __name__ == "__main__":
      # Verify environment variables
