@@ -228,14 +228,35 @@ def get_bible_verse(emotion):
 
 # --- Handler Functions ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hello! How are you feeling? (sad, anxious, lonely, angry, scared, discouraged, overwhelmed, guilty, insecure, grieving)"
-    )
-    return 1
+    try:
+        logger.info(f"🚩 Start command from {update.effective_user.id}")
+        await update.message.reply_text(
+            "Hello! How are you feeling? (sad, anxious, lonely, angry, etc)",
+            reply_markup=ReplyKeyboardMarkup(
+                [list(bible_references.keys())], 
+                one_time_keyboard=True
+            )
+        )
+        return WAITING_FOR_EMOTION
+    except Exception as e:
+        logger.error(f"Start command error: {e}")
+        raise
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("I'm here to listen...")
-    return 1
+   try:
+        text = update.message.text.lower()
+        if text in bible_references:
+            verse, message = get_bible_verse(text)
+            await update.message.reply_text(f"{verse}\n\n{message}")
+        else:
+            await update.message.reply_text("Please choose one of the suggested emotions")
+        return WAITING_FOR_EMOTION
+    except Exception as e:
+        logger.error(f"Message handler error: {e}")
+        raise
+    
+    # await update.message.reply_text("I'm here to listen...")
+    # return 1
     # try:
     #     if not update.message or not update.message.text:
     #         await update.message.reply_text("Please send a text message")
@@ -275,6 +296,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass  # Prevent error loops
 
+# Add this temporary debug handler at the start of main_async()
+async def debug_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"📨 Received update: {update}")
+    await update.message.reply_text("I received your message!")
+
+# Add this right after creating your application
+application.add_handler(MessageHandler(filters.ALL, debug_updates))
+
 async def main_async():
     """Main async entry point with proper lifecycle management"""
     application = None
@@ -290,10 +319,16 @@ async def main_async():
             .post_init(post_init) \
             .post_stop(post_stop) \
             .build()
+        # Enable verbose logging
+        application.add_error_handler(error_handler)
+        application.bot_data['dispatcher'].update_verbose = True
+
+        
 
         # 3. Clear webhook and set up handlers
         await application.initialize()
         await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info(f"🔄 Current bot updates method: {'webhook' if await application.bot.get_webhook_info() else 'polling'}")
         
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
@@ -370,13 +405,18 @@ def main():
 
     # Run the application properly
     try:
+        logger.info("⚡ Starting bot...")
         asyncio.run(main_async())
-    except KeyboardInterrupt:
-        logger.info("🛑 Bot stopped by user")
     except Exception as e:
-        logger.error(f"💥 Fatal error: {e}")
+        logger.critical(f"💀 Critical failure: {e}")
     finally:
-        logger.info("🏁 Application terminated")
+        logger.info("🛑 Bot terminated")
+    # except KeyboardInterrupt:
+    #     logger.info("🛑 Bot stopped by user")
+    # except Exception as e:
+    #     logger.error(f"💥 Fatal error: {e}")
+    # finally:
+    #     logger.info("🏁 Application terminated")
 
         # Ensure cleanup runs
         # try:
