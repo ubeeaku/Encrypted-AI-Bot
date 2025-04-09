@@ -165,10 +165,12 @@ async def generate_ai_response(prompt):
             max_tokens=500
         )
         return response.choices[0].message.content
+    except openai.error.APIError as e:
+        logger.error(f"OpenAI API Error: {e}")
+        return "I'm having technical difficulties. Please try again later."
     except Exception as e:
-        logger.error(f"AI Error: {e}")
-        return "I'm having trouble understanding. Could you please rephrase your question?"
-
+        logger.error(f"Unexpected AI Error: {e}")
+        return "Something went wrong. Could you please rephrase your question?"
 # --- Handler Functions ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
@@ -181,8 +183,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "3. Get biblical encouragement\n\n"
             "How are you feeling today?",
             reply_markup=ReplyKeyboardMarkup(
-                [["I need a verse"], ["I want to talk"]], 
-                one_time_keyboard=True
+                keyboard=[
+                    ["1. Get verse", "2. Talk"],  # Numeric options like in image
+                    ["3. Help", "4. Cancel"]
+                ],
+                one_time_keyboard=True,
+                resize_keyboard=True
             )
         )
         return WAITING_FOR_EMOTION
@@ -196,11 +202,12 @@ async def handle_emotion_choice(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         text = update.message.text.lower()
         
-        if "verse" in text:
+        if "verse" in text or "3874" in text:  # Added numeric code from image
             await update.message.reply_text(
                 "How are you feeling?",
                 reply_markup=ReplyKeyboardMarkup(
-                    [list(bible_references.keys())], 
+                    [["Sad", "Anxious", "Lonely"], 
+                     ["Angry", "Scared", "Discouraged"]], 
                     one_time_keyboard=True
                 )
             )
@@ -211,8 +218,23 @@ async def handle_emotion_choice(update: Update, context: ContextTypes.DEFAULT_TY
                 reply_markup=ReplyKeyboardMarkup([["/cancel"]], one_time_keyboard=True)
             )
             return GENERAL_CONVERSATION
+        elif text in [e.lower() for e in bible_references.keys()]:
+            # Handle direct emotion input
+            verse, message = get_bible_verse(text)
+            await update.message.reply_text(f"{verse}\n\n{message}")
+            await update.message.reply_text(
+                "Would you like to talk more about this?",
+                reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True)
+            )
+            return GENERAL_CONVERSATION
         else:
-            await update.message.reply_text("Please choose 'I need a verse' or 'I want to talk'")
+            await update.message.reply_text(
+                "Please choose 'I need a verse' or 'I want to talk'",
+                reply_markup=ReplyKeyboardMarkup(
+                    [["I need a verse"], ["I want to talk"]], 
+                    one_time_keyboard=True
+                )
+            )
             return WAITING_FOR_EMOTION
     except Exception as e:
         logger.error(f"Choice handler error: {e}")
@@ -371,8 +393,7 @@ async def run_bot():
             entry_points=[CommandHandler('start', start)],
             states={
                 WAITING_FOR_EMOTION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_emotion_choice),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_emotion_choice)
                 ],
                 GENERAL_CONVERSATION: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_conversation)
