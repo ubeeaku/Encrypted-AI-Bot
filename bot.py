@@ -8,6 +8,7 @@ import atexit
 import re
 import psutil
 import openai  # Added for AI conversations
+from openai import OpenAI
 from flask import Flask
 from tenacity import retry, stop_after_attempt, wait_exponential
 from telegram import Update, ReplyKeyboardMarkup
@@ -45,8 +46,7 @@ API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
 DEFAULT_BIBLE_ID = "de4e12af7f28f599-01"
 
 # Initialize OpenAI
-openai.api_key = OPENAI_API_KEY
-
+client = OpenAI(api_key=OPENAI_API_KEY)
 # Dictionary of emotions and Bible references
 bible_references = {
     "sad": ["Psalm 34:18", "Matthew 11:28", "Matthew 5:4", "Psalm 147:3"],
@@ -155,7 +155,7 @@ def get_bible_verse(emotion):
 async def generate_ai_response(prompt):
     """Generate AI response using OpenAI"""
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a compassionate Christian counselor. Provide biblical wisdom and comfort in your responses."},
@@ -163,6 +163,7 @@ async def generate_ai_response(prompt):
             ],
             temperature=0.7,
             max_tokens=500
+            timeout=10.0
         )
         return response.choices[0].message.content
     except openai.error.APIError as e:
@@ -262,49 +263,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle general conversation with AI"""
     try:
-        user_message = update.message.text.lower()
+        user_message = update.message.text
         
         # Handle cancellation
-        if user_message in ["no", "cancel"]:
+        if user_message.lower() in ["no", "cancel"]:
             await update.message.reply_text("Okay, no problem. Type /start whenever you'd like to talk again.")
             return ConversationHandler.END
             
         # Show typing indicator
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         
-        # First check if message matches any emotional keywords
-        emotion_keywords = {
-            'alone': ['alone', 'lonely', 'isolated'],
-            'mess': ['mess', 'chaos', 'overwhelmed'],
-            'anxious': ['anxious', 'worried', 'nervous'],
-            'sad': ['sad', 'depressed', 'hopeless'],
-            # Add more emotion mappings here
-        }
-        
-        detected_emotion = None
-        for emotion, keywords in emotion_keywords.items():
-            if any(keyword in user_message for keyword in keywords):
-                detected_emotion = emotion
-                break
-        
-        # If emotion detected, provide Bible verse first
-        if detected_emotion:
-            verse, explanation = get_bible_verse(detected_emotion)
-            await update.message.reply_text(f"{verse}\n\n{explanation}")
-            await asyncio.sleep(1)  # Small delay
-            follow_up = "Would you like to talk more about how you're feeling?"
-            await update.message.reply_text(follow_up, 
-                                          reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True))
-            return GENERAL_CONVERSATION
-        
-        # Otherwise use AI for general conversation
+        # System prompt
         system_prompt = """You are a compassionate Christian counselor. Respond with:
         1. Relevant Bible verses (use format "Book Chapter:Verse")
         2. Practical advice
         3. Follow-up questions
         Be kind, concise, and scripture-focused."""
         
-        response = await openai.ChatCompletion.acreate(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -316,7 +292,6 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         ai_response = response.choices[0].message.content
         
-        # Ensure response isn't empty
         if not ai_response.strip():
             raise ValueError("Empty AI response")
             
@@ -325,10 +300,10 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
         
     except Exception as e:
         logger.error(f"Conversation error: {e}")
-        # Provide default Bible verse when errors occur
-        verse, explanation = get_bible_verse('sad')  # Default comfort verse
+        verse, explanation = get_bible_verse('sad')
         await update.message.reply_text(f"I want to offer you this encouragement:\n\n{verse}\n\n{explanation}")
         return GENERAL_CONVERSATION
+        
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /cancel command"""
