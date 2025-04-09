@@ -7,3 +7,4 @@ tenacity==8.2.3
 filelock==3.13.1
 psutil
 openai
+pip install --upgrade openai
