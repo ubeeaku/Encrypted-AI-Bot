@@ -21,7 +21,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
     ConversationHandler,
-    updater
+    Updater
 )
 import logging
 
