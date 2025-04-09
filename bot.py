@@ -7,6 +7,8 @@ import sys
 import atexit
 import re
 import psutil
+import socket
+import time
 import openai  # Added for AI conversations
 from openai import OpenAI
 from flask import Flask
@@ -18,7 +20,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
-    ConversationHandler
+    ConversationHandler,
+    updater
 )
 import logging
 
@@ -73,6 +76,20 @@ app = Flask(__name__)
 def health_check():
     return "OK", 200
 
+@atexit.register
+def global_cleanup():
+    """Global cleanup handler"""
+    logger.info("🛑 Running global cleanup")
+    try:
+        asyncio.run(cleanup_lock())
+    except:
+        pass
+        
+def check_port(port):
+    """Check if port is available"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) != 0
+        
 def run_flask():
     """Run Flask server with dynamic port handling"""
     port = int(os.environ.get("PORT", 10000))
@@ -107,6 +124,15 @@ async def enforce_single_instance():
     except Exception as e:
         logger.error(f"Instance check failed: {e}")
         return False
+
+def ensure_single_instance(port=5000):
+    """Ensure only one instance runs"""
+    max_retries = 5
+    for _ in range(max_retries):
+        if check_port(port):
+            return True
+        time.sleep(2)
+    return False
 
 async def cleanup_lock():
     """Safe lock removal"""
@@ -417,6 +443,11 @@ async def run_bot():
 
 def main():
     """Synchronous entry point"""
+    
+    if not ensure_single_instance():
+        logger.error("❌ Another instance is already running. Exiting.")
+        sys.exit(1)
+        
     # Start Flask in a separate thread
     threading.Thread(target=run_flask, daemon=True).start()
 
