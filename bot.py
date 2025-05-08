@@ -49,7 +49,7 @@ API_BIBLE_URL = "https://api.scripture.api.bible/v1/bibles"
 DEFAULT_BIBLE_ID = "de4e12af7f28f599-01"
 
 # Initialize OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY
 # Dictionary of emotions and Bible references
 bible_references = {
     "sad": ["Psalm 34:18", "Matthew 11:28", "Matthew 5:4", "Psalm 147:3"],
@@ -181,7 +181,7 @@ def get_bible_verse(emotion):
 async def generate_ai_response(prompt):
     """Generate AI response using OpenAI"""
     try:
-        response = await client.chat.completions.create(
+        response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a compassionate Christian counselor. Provide biblical wisdom and comfort in your responses."},
@@ -306,7 +306,7 @@ async def handle_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
         3. Follow-up questions
         Be kind, concise, and scripture-focused."""
         
-        response = await client.chat.completions.create(
+        response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
